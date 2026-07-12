@@ -1,0 +1,17 @@
+{
+  "appId": "com.anime.standalone",
+  "appName": "anime",
+  "webDir": "android-www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

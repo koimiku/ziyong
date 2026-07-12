@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="anime" />
+    <title>anime - 动漫搜索</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="desktop-titlebar" id="desktopTitlebar" hidden aria-label="窗口标题栏">
+      <div class="desktop-titlebar-drag">
+        <span class="desktop-titlebar-mark" aria-hidden="true">A</span>
+        <span class="desktop-titlebar-title">anime</span>
+      </div>
+      <div class="desktop-titlebar-controls">
+        <button class="desktop-titlebar-btn" type="button" data-window="minimize" aria-label="最小化">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="5.5" width="10" height="1" rx="0.5" fill="currentColor"/></svg>
+        </button>
+        <button class="desktop-titlebar-btn" type="button" data-window="maximize" aria-label="最大化">
+          <svg class="desktop-titlebar-icon-maximize" viewBox="0 0 12 12" aria-hidden="true">
+            <rect x="1.75" y="1.75" width="8.5" height="8.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+          <svg class="desktop-titlebar-icon-restore" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M3.5 2.5H8.5A1 1 0 0 1 9.5 3.5V8.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <rect x="2.5" y="3.5" width="6.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+        </button>
+        <button class="desktop-titlebar-btn desktop-titlebar-btn-close" type="button" data-window="close" aria-label="关闭">
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2.5 2.5 9.5 9.5M9.5 2.5 2.5 9.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <header class="mobile-header" id="mobileHeader" aria-label="手机导航">
+      <button class="icon-button mobile-back-button" id="mobileBackButton" type="button" aria-label="返回探索" hidden>
+        <span aria-hidden="true">←</span>
+      </button>
+      <button class="icon-button mobile-menu-button" id="mobileMenuButton" type="button" aria-label="筛选">
+        <span aria-hidden="true">☰</span>
+      </button>
+      <div class="mobile-header-partition icon-rail-partition" id="mobileContentModeToggle" role="group" aria-label="内容分区">
+        <button class="partition-button active" type="button" data-content-mode="anime" title="动漫">漫</button>
+        <button class="partition-button" type="button" data-content-mode="tokusatsu" title="特摄">摄</button>
+      </div>
+      <button class="icon-button mobile-search-button" id="mobileSearchButton" type="button" aria-label="搜索">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
+      </button>
+    </header>
+
+    <div class="mobile-drawer-backdrop" id="mobileDrawerBackdrop"></div>
+    <aside class="mobile-drawer" id="mobileDrawer" aria-label="筛选面板">
+      <div class="mobile-drawer-head">
+        <strong>筛选与设置</strong>
+        <button class="icon-button" id="mobileDrawerClose" type="button" aria-label="关闭">✕</button>
+      </div>
+      <section class="control-group" aria-label="筛选类型">
+        <h2>类型</h2>
+        <div class="segmented mobile-type-tabs">
+          <button class="active" type="button" data-type="all">全部</button>
+          <button type="button" data-type="TV">TV</button>
+          <button type="button" data-type="Movie">剧场版</button>
+        </div>
+      </section>
+      <section class="control-group" aria-label="年份筛选">
+        <h2>年份</h2>
+        <select id="mobileYearSelect">
+          <option value="all">全部年份</option>
+          <option value="2025">2025</option>
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+          <option value="2020s">2020 年代</option>
+          <option value="2010s">2010 年代</option>
+          <option value="2000s">2000 年代</option>
+          <option value="older">更早</option>
+        </select>
+      </section>
+      <section class="control-group" aria-label="排序方式">
+        <h2>排序</h2>
+        <select id="mobileSortSelect">
+          <option value="match">匹配优先</option>
+          <option value="score">评分优先</option>
+          <option value="year">年份优先</option>
+        </select>
+      </section>
+      <section class="control-group" aria-label="主题设置">
+        <h2>主题</h2>
+        <select id="mobileThemeSelect">
+          <option value="light">浅色</option>
+          <option value="dark">深色</option>
+          <option value="system">跟随系统</option>
+        </select>
+      </section>
+    </aside>
+
+    <div class="mobile-install-banner" id="mobileInstallBanner" hidden>
+      <p>可安装到主屏幕，像 App 一样全屏使用。</p>
+      <div class="mobile-install-actions">
+        <button class="small-button" id="mobileInstallButton" type="button">安装</button>
+        <button class="ghost-button mobile-install-dismiss" id="mobileInstallDismiss" type="button">知道了</button>
+      </div>
+    </div>
+
+    <nav class="mobile-nav" id="mobileNav" aria-label="底部导航">
+      <button class="active" type="button" data-mobile-tab="home" aria-label="首页">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 9v12h5v-7h6v7h5V9l-8-6Z"/></svg>
+        <span>首页</span>
+      </button>
+      <button type="button" data-mobile-tab="miru" aria-label="片源">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 17.3-4.2 2.2 1-4.7-3.4-3 4.9-.4L12 6l1.7 4.4 4.9.4-3.4 3 1 4.7-4.2-2.2Z"/></svg>
+        <span>片源</span>
+      </button>
+      <button type="button" data-mobile-tab="settings" aria-label="设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm8.94 4.46-1.2-.18a6.9 6.9 0 0 0-.85-2.05l.75-1-.85-.85-1 .75a6.9 6.9 0 0 0-2.05-.85l-.18-1.2h-1.2l-.18 1.2a6.9 6.9 0 0 0-2.05.85l-1-.75-.85.85.75 1a6.9 6.9 0 0 0-.85 2.05l-1.2.18v1.2l1.2.18c.18.73.47 1.42.85 2.05l-.75 1 .85.85 1-.75c.63.38 1.32.67 2.05.85l.18 1.2h1.2l.18-1.2a6.9 6.9 0 0 0 2.05-.85l1 .75.85-.85-.75-1c.38-.63.67-1.32.85-2.05l1.2-.18v-1.2Z"/></svg>
+        <span>设置</span>
+      </button>
+    </nav>
+
+    <main class="app-shell">
+      <div class="service-warning" id="serviceWarning" hidden role="alert"></div>
+
+      <nav class="icon-rail" id="iconRail" aria-label="主导航">
+        <div class="icon-rail-brand-wrap">
+          <button class="icon-rail-brand" type="button" id="homeButton" aria-label="返回探索">A</button>
+        </div>
+        <div class="icon-rail-partition" id="contentModeToggle" role="group" aria-label="内容分区">
+          <button class="partition-button active" type="button" data-content-mode="anime" title="动漫">漫</button>
+          <button class="partition-button" type="button" data-content-mode="tokusatsu" title="特摄">摄</button>
+        </div>
+        <button class="rail-button" type="button" id="headerSearchButton" aria-label="搜索">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
+        </button>
+        <button class="rail-button active" type="button" data-nav-view="explore" aria-label="探索">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V6l-8-4Zm0 2.2 6 3v5.8c0 3.9-2.6 7.6-6 8.8-3.4-1.2-6-4.9-6-8.8V7.2l6-3Z"/></svg>
+        </button>
+        <button class="rail-button" type="button" data-nav-view="miru" aria-label="片源">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 17.3-4.2 2.2 1-4.7-3.4-3 4.9-.4L12 6l1.7 4.4 4.9.4-3.4 3 1 4.7-4.2-2.2Z"/></svg>
+        </button>
+        <div class="icon-rail-bottom">
+          <button class="rail-button" type="button" id="lanShareOpen" aria-label="手机观看">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 2v16h10V4H7Zm5 17a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
+          </button>
+          <button class="rail-button" type="button" data-nav-view="settings" aria-label="设置">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm8.94 4.46-1.2-.18a6.9 6.9 0 0 0-.85-2.05l.75-1-.85-.85-1 .75a6.9 6.9 0 0 0-2.05-.85l-.18-1.2h-1.2l-.18 1.2a6.9 6.9 0 0 0-2.05.85l-1-.75-.85.85.75 1a6.9 6.9 0 0 0-.85 2.05l-1.2.18v1.2l1.2.18c.18.73.47 1.42.85 2.05l-.75 1 .85.85 1-.75c.63.38 1.32.67 2.05.85l.18 1.2h1.2l.18-1.2a6.9 6.9 0 0 0 2.05-.85l1 .75.85-.85-.75-1c.38-.63.67-1.32.85-2.05l1.2-.18v-1.2Z"/></svg>
+          </button>
+        </div>
+      </nav>
+
+      <div class="main-stage">
+        <header class="stage-header">
+          <div class="stage-header-main">
+            <button class="ghost-button back-to-explore" type="button" id="backToExplore" hidden>← 返回探索</button>
+            <p class="eyebrow">Anime</p>
+            <h2 id="pageTitle">探索</h2>
+            <p class="app-version" id="appVersion" hidden></p>
+          </div>
+          <form class="header-search" id="searchForm" role="search" autocomplete="off">
+            <div class="header-search-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
+              <input
+                id="searchInput"
+                type="search"
+                placeholder="搜索番剧名、别名..."
+                autocomplete="off"
+                enterkeyhint="search"
+                aria-autocomplete="list"
+                aria-controls="searchSuggest"
+                aria-expanded="false"
+              />
+              <button class="header-search-clear" id="searchClear" type="button" aria-label="清空" hidden>✕</button>
+            </div>
+            <div class="search-suggest" id="searchSuggest" role="listbox" hidden></div>
+          </form>
+        </header>
+
+        <div class="filter-bar explore-filters">
+          <div class="filter-group">
+            <span class="filter-label">类型</span>
+            <div class="segmented" id="typeTabs">
+              <button class="active" type="button" data-type="all">全部</button>
+              <button type="button" data-type="TV">TV</button>
+              <button type="button" data-type="Movie">剧场版</button>
+            </div>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">年份</span>
+            <select id="yearFilterSelect" aria-label="年份筛选">
+              <option value="all">全部年份</option>
+              <option value="2025">2025</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2020s">2020 年代</option>
+              <option value="2010s">2010 年代</option>
+              <option value="2000s">2000 年代</option>
+              <option value="older">更早</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">排序</span>
+            <select id="sortSelect" aria-label="排序">
+              <option value="score">评分优先</option>
+              <option value="year">年份优先</option>
+              <option value="match">匹配优先</option>
+            </select>
+          </div>
+        </div>
+
+        <section class="status-line" id="statusLine" aria-live="polite">
+          浏览热门番剧，或搜索你想看的内容。
+        </section>
+        <p class="mobile-server-hint" id="mobileServerHint" hidden></p>
+
+        <div class="dashboard" id="dashboardView">
+          <section class="media-row media-row-hero" id="heroSection">
+            <div class="media-row-head">
+              <h3>最高热度</h3>
+              <span class="media-row-meta" id="heroCount">Bangumi 高分推荐</span>
+            </div>
+            <div class="media-row-track media-row-track--hero" id="heroRow" aria-label="最高热度"></div>
+            <div class="media-row-footer">
+              <button class="ghost-button hero-more-button" id="heroMoreButton" type="button" hidden>
+                更多
+              </button>
+            </div>
+          </section>
+          <section class="media-row media-row-calendar" id="calendarSection" hidden>
+            <div class="media-row-head">
+              <h3>放送日历</h3>
+              <span class="media-row-meta" id="calendarMeta">本周更新</span>
+            </div>
+            <div class="calendar-tabs" id="calendarTabs" role="tablist" aria-label="星期筛选"></div>
+            <div class="media-row-track" id="calendarRow" aria-label="放送日历"></div>
+          </section>
+          <section class="media-row media-row-continue" id="continueSection">
+            <div class="media-row-head">
+              <h3>继续观看</h3>
+              <span class="media-row-meta" id="continueCount"></span>
+            </div>
+            <div class="media-row-track" id="continueRow" aria-label="继续观看"></div>
+          </section>
+          <section class="recommend-section" id="recommendSection">
+            <div class="media-row-head">
+              <h3>更多推荐</h3>
+              <span class="media-row-meta" id="recommendCount"></span>
+            </div>
+            <div class="recommend-grid" id="recommendGrid" aria-label="更多推荐"></div>
+          </section>
+        </div>
+
+        <section class="results-view" id="resultsView" hidden aria-label="列表浏览">
+          <div class="result-tools">
+            <button class="ghost-button back-to-explore" type="button" id="searchBackButton" hidden>← 返回探索</button>
+            <span id="searchResultCount">搜索结果</span>
+          </div>
+          <section class="results-grid results-grid--browse" id="resultsGrid"></section>
+        </section>
+
+        <section class="settings-view" id="settingsView" hidden aria-label="设置">
+          <div class="settings-card" id="mobileInstallGuide">
+            <h3>安装到手机</h3>
+            <p class="install-guide-ready" hidden>你的浏览器支持一键安装，点下方按钮即可。</p>
+            <p class="install-guide-android">
+              Android：点浏览器菜单（⋮）→「添加到主屏幕」或「安装应用」。
+            </p>
+            <p class="install-guide-ios" hidden>
+              iPhone：Safari 底部点分享 □↑ →「添加到主屏幕」。
+            </p>
+            <button class="small-button" id="settingsInstallButton" type="button" hidden>安装 App</button>
+          </div>
+          <div class="settings-card">
+            <h3>外观</h3>
+            <label for="themeSelect">主题</label>
+            <select id="themeSelect">
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+              <option value="system">跟随系统</option>
+            </select>
+          </div>
+          <div class="settings-card">
+            <h3>手机观看</h3>
+            <p class="lan-share-hint" id="lanShareHint">电脑版可生成二维码；手机浏览器直接访问同 WiFi 地址即可。</p>
+            <p class="mobile-lan-hint" id="mobileLanHint"></p>
+          </div>
+          <div class="settings-card notice">
+            <h3>资源说明</h3>
+            <p>内置在线片源优先；也可安装 Miru 官方仓库扩展作为额外视频源。BT 类扩展暂不支持。</p>
+          </div>
+        </section>
+
+        <section class="miru-view sources-page" id="miruView" hidden aria-label="片源管理">
+          <header class="sources-page-header">
+            <div class="sources-page-intro">
+              <p class="eyebrow">Anime</p>
+              <h2>片源</h2>
+              <p class="sources-page-desc">内置在线源与 Miru 扩展，播放番剧时自动匹配可用线路。</p>
+            </div>
+            <div class="sources-page-actions">
+              <button class="ghost-button" id="miruHealthButton" type="button">检测可用性</button>
+              <button class="ghost-button" id="miruRefreshButton" type="button">刷新</button>
+            </div>
+          </header>
+          <p class="miru-status" id="miruStatus">正在连接官方仓库...</p>
+          <div class="miru-extension-list" id="miruExtensionList"></div>
+        </section>
+      </div>
+
+      <aside class="detail-panel" id="detailPanel" aria-label="番剧详情">
+        <div class="empty-state">
+          <h2>选择一部番剧</h2>
+          <p>点击卡片开始观看，自动匹配多源在线片源。</p>
+        </div>
+      </aside>
+
+      <!-- Legacy sidebar hooks for mobile sync -->
+      <aside class="sidebar legacy-sidebar" hidden aria-hidden="true">
+        <div class="segmented mobile-type-tabs"></div>
+      </aside>
+    </main>
+
+    <div class="lan-connect-backdrop" id="lanConnectBackdrop"></div>
+    <section class="lan-connect-dialog" id="lanConnectDialog" aria-label="手机连接">
+      <div class="lan-connect-card">
+        <h2>手机扫码观看</h2>
+        <p class="lan-connect-tip" id="lanConnectTip">手机与电脑连同一 WiFi。电脑插网线没问题，手机用 WiFi 即可。</p>
+        <img class="lan-connect-qr" id="lanConnectQr" alt="" width="220" height="220" />
+        <p class="lan-connect-url" id="lanConnectUrl"></p>
+        <div class="lan-connect-actions">
+          <button class="small-button" id="lanConnectCopy" type="button">复制地址</button>
+          <button class="ghost-button" id="lanConnectDismiss" type="button">开始观看</button>
+        </div>
+      </div>
+    </section>
+
+    <template id="animeCardTemplate">
+      <article class="anime-card">
+        <img class="poster" alt="" loading="lazy" decoding="async" />
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="badge type"></span>
+            <span class="muted year"></span>
+          </div>
+          <h3></h3>
+          <p class="synonyms"></p>
+          <div class="card-footer">
+            <span class="score"></span>
+            <button class="card-play" type="button" aria-label="播放">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Z"/></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <template id="heroCardTemplate">
+      <article class="hero-card">
+        <img class="poster" alt="" loading="lazy" decoding="async" />
+        <div class="hero-card-body">
+          <div class="card-meta">
+            <span class="badge type"></span>
+          </div>
+          <h3></h3>
+          <p class="synonyms"></p>
+          <div class="hero-card-footer">
+            <span class="score"></span>
+            <button class="card-play hero-play" type="button" aria-label="播放">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Z"/></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+    <script type="module" src="./app.js"></script>
+    <script>
+      (async () => {
+        if (!("serviceWorker" in navigator)) return;
+
+        const isDesktopApp =
+          navigator.userAgent.includes("Electron") ||
+          window.location.hostname === "127.0.0.1" ||
+          window.location.hostname === "localhost";
+
+        if (isDesktopApp) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((entry) => entry.unregister()));
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((key) => caches.delete(key)));
+          }
+          return;
+        }
+
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js").catch(() => {});
+        });
+      })();
+    </script>
+  </body>
+</html>
