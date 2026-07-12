@@ -6,6 +6,7 @@ import {
   searchTokuzilla,
 } from "./tokuzilla.js";
 import { watchSources } from "./shared.js";
+import { APP_VERSION } from "../version.js";
 
 const BANGUMI_CALENDAR = "https://api.bgm.tv/calendar";
 
@@ -120,7 +121,7 @@ export async function handleNativeApi(input, init = {}) {
   try {
     if (path === "/api/server-info") {
       return jsonResponse({
-        version: "1.3.0-android",
+        version: `${APP_VERSION}-android`,
         mode: "android-standalone",
         urls: [],
         mobileHint: "安卓独立版：不依赖电脑，内置片源在手机本地解析。",

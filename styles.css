@@ -1600,6 +1600,92 @@ body.lan-dialog-open .mobile-nav {
   visibility: hidden;
 }
 
+.app-update-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(16, 10, 14, 0.72);
+}
+
+.app-update-backdrop.is-open {
+  display: block;
+}
+
+.app-update-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: none;
+  place-items: center;
+  padding: 20px;
+  margin: 0;
+  border: 0;
+}
+
+.app-update-dialog.is-open {
+  display: grid;
+}
+
+.app-update-card {
+  width: min(100%, 360px);
+  padding: 22px 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.app-update-card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.app-update-tip {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.app-update-notes {
+  margin: 0 0 16px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-update-desc,
+.settings-update-status {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.settings-update-status {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+body.app-update-open {
+  overflow: hidden;
+}
+
 .content {
   padding: 28px;
   min-width: 0;
@@ -2615,7 +2701,7 @@ body.lan-dialog-open .mobile-nav {
 
   .watch-body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
   }
 
   .watch-support {
@@ -2625,8 +2711,21 @@ body.lan-dialog-open .mobile-nav {
 }
 
 @media (max-width: 780px) {
-  body {
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  :root {
+    --mobile-nav-clearance: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.is-mobile {
+    min-height: 100dvh;
+    padding-bottom: 0;
+  }
+
+  body.is-mobile:not(.mobile-watching) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
   }
 
   body.is-mobile .mobile-header,
@@ -2653,6 +2752,13 @@ body.lan-dialog-open .mobile-nav {
     display: none;
   }
 
+  body.is-mobile.mobile-watching {
+    display: block;
+    height: auto;
+    max-height: none;
+    overflow: auto;
+  }
+
   body.is-mobile .lan-share-panel,
   body.is-mobile .lan-connect-dialog,
   body.is-mobile .lan-connect-backdrop {
@@ -2663,10 +2769,11 @@ body.lan-dialog-open .mobile-nav {
     position: sticky;
     top: 0;
     z-index: 30;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px calc(10px + env(safe-area-inset-top, 0px));
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
     background: var(--panel-bg);
     border-bottom: 1px solid var(--line);
     backdrop-filter: blur(18px);
@@ -2770,7 +2877,7 @@ body.lan-dialog-open .mobile-nav {
     bottom: 0;
     z-index: 50;
     width: min(86vw, 320px);
-    padding: calc(16px + env(safe-area-inset-top, 0px)) 18px 24px;
+    padding: calc(16px + env(safe-area-inset-top, 0px)) 18px calc(24px + env(safe-area-inset-bottom, 0px));
     background: var(--surface);
     border-right: 1px solid var(--line);
     overflow-y: auto;
@@ -2793,7 +2900,7 @@ body.lan-dialog-open .mobile-nav {
     position: fixed;
     left: 12px;
     right: 12px;
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-nav-clearance);
     z-index: 35;
     gap: 10px;
     padding: 12px 14px;
@@ -2944,16 +3051,16 @@ body.lan-dialog-open .mobile-nav {
   }
 
   body.is-mobile .media-row-track--hero .hero-card {
-    width: min(300px, 82vw);
+    width: min(280px, 78vw);
   }
 
   body.is-mobile .media-row-track .anime-card {
-    width: 148px;
+    width: min(148px, 42vw);
   }
 
   body.is-mobile .recommend-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px;
   }
 
   body.is-mobile .recommend-grid .anime-card {
@@ -2981,7 +3088,28 @@ body.lan-dialog-open .mobile-nav {
   }
 
   .main-stage {
-    padding: 16px;
+    padding: 16px 16px calc(16px + var(--mobile-nav-clearance));
+  }
+
+  body.is-mobile:not(.mobile-watching) .app-shell {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+
+  body.is-mobile:not(.mobile-watching) .main-stage {
+    height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.is-mobile.mobile-watching .main-stage {
+    padding: 0;
+    height: auto;
+    min-height: 100dvh;
   }
 
   .filter-bar {
@@ -3061,6 +3189,24 @@ body.lan-dialog-open .mobile-nav {
     display: none;
   }
 
+  body.is-mobile.mobile-watching .app-shell,
+  body.is-mobile.mobile-watching .app-shell.is-watching {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  body.is-mobile.mobile-watching .app-shell.is-watching .detail-panel,
+  body.is-mobile.mobile-watching .detail-panel {
+    position: static;
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    padding: 0;
+  }
+
   .app-shell.is-watching .detail-panel {
     padding: 0;
   }
@@ -3069,11 +3215,26 @@ body.lan-dialog-open .mobile-nav {
   .watch-page {
     height: auto;
     min-height: 100dvh;
+    grid-template-rows: auto auto auto;
+  }
+
+  body.is-mobile.mobile-watching .entry-page,
+  body.is-mobile.mobile-watching .watch-page {
+    height: auto;
+    min-height: auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .entry-topbar,
+  .watch-topbar {
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   }
 
   .entry-body,
   .watch-body {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    min-height: auto;
   }
 
   .entry-hero-content {
@@ -3085,32 +3246,56 @@ body.lan-dialog-open .mobile-nav {
     width: 88px;
   }
 
+  .entry-player-column,
+  .watch-player-column,
+  .entry-sidebar,
+  .watch-support {
+    overflow: visible;
+    max-height: none;
+  }
+
   .entry-player-column .player-frame,
   .watch-player-column .player-frame {
-    min-height: 220px;
+    min-height: 200px;
     aspect-ratio: 16 / 9;
   }
 
   .entry-sidebar,
   .watch-support {
-    max-height: none;
     border-left: 0;
     border-top: 1px solid var(--line);
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .entry-episode-tabs,
-  .watch-support .episode-tabs {
-    max-height: 240px;
-    overflow-y: auto;
+  .watch-support .episode-tabs,
+  .episode-tabs {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .episode-source-chips {
+    gap: 8px;
+  }
+
+  .episode-source-chip {
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.35;
+    border-radius: 12px;
+    padding: 8px 12px;
+    min-height: 36px;
   }
 
   .results-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px;
   }
 
   .anime-card h3 {
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.35;
   }
 
   .watch-subject {
@@ -3128,5 +3313,14 @@ body.lan-dialog-open .mobile-nav {
 
   .watch-back {
     width: auto;
+  }
+
+  body.is-mobile .stage-header-main h2 {
+    font-size: clamp(24px, 7vw, 32px);
+  }
+
+  body.is-mobile .settings-view,
+  body.is-mobile.mobile-sources-mode .miru-view {
+    padding-bottom: 8px;
   }
 }

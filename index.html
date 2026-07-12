@@ -275,6 +275,12 @@
             </p>
             <button class="small-button" id="settingsInstallButton" type="button" hidden>安装 App</button>
           </div>
+          <div class="settings-card" id="androidUpdateCard">
+            <h3>应用更新</h3>
+            <p class="settings-update-desc">检查 GitHub Release 是否有新版本，可选择更新或暂不更新。</p>
+            <p class="settings-update-status" id="settingsUpdateStatus" hidden></p>
+            <button class="small-button" id="settingsCheckUpdate" type="button">检查更新</button>
+          </div>
           <div class="settings-card">
             <h3>外观</h3>
             <label for="themeSelect">主题</label>
@@ -335,6 +341,19 @@
         <div class="lan-connect-actions">
           <button class="small-button" id="lanConnectCopy" type="button">复制地址</button>
           <button class="ghost-button" id="lanConnectDismiss" type="button">开始观看</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="app-update-backdrop" id="appUpdateBackdrop"></div>
+    <section class="app-update-dialog" id="appUpdateDialog" aria-label="应用更新" role="dialog" aria-modal="true">
+      <div class="app-update-card">
+        <h2 id="appUpdateTitle">发现新版本</h2>
+        <p class="app-update-tip" id="appUpdateTip"></p>
+        <pre class="app-update-notes" id="appUpdateNotes" hidden></pre>
+        <div class="app-update-actions">
+          <button class="small-button" id="appUpdateConfirm" type="button">更新</button>
+          <button class="ghost-button" id="appUpdateDismiss" type="button">暂不更新</button>
         </div>
       </div>
     </section>

@@ -89,18 +89,22 @@ export function findSourceIndex(episodeEntry, resume) {
 export function renderEpisodeSourceChips(episodeEntry, activeSourceIndex) {
   if (!episodeEntry?.sources?.length) return "";
   return episodeEntry.sources
-    .map(
-      (source, index) => `
+    .map((source, index) => {
+      const siteName = source.sourceName.replace(/ · Miru$/, "");
+      const lineName = String(source.lineName || "").trim();
+      const label =
+        lineName && lineName !== siteName ? `${siteName} · ${lineName}` : siteName;
+      return `
         <button
           class="episode-source-chip${index === activeSourceIndex ? " active" : ""}"
           type="button"
           data-source-index="${index}"
-          title="${escapeAttr(`${source.sourceName} · ${source.lineName}`)}"
+          title="${escapeAttr(label)}"
         >
-          ${escapeHtml(source.sourceName.replace(/ · Miru$/, ""))}
+          ${escapeHtml(label)}
         </button>
-      `
-    )
+      `;
+    })
     .join("");
 }
 

@@ -1,9 +1,11 @@
-import { cpSync, mkdirSync, rmSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, cpSync, mkdirSync, rmSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "android-www");
+const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const APP_VERSION = String(PKG.version || "0.0.0");
 
 const FILES = [
   "index.html",
@@ -44,11 +46,12 @@ writeFileSync(
     {
       mode: "android-standalone",
       builtAt: new Date().toISOString(),
-      version: "1.3.0",
+      version: APP_VERSION,
+      githubRepo: "koimiku/ziyong",
     },
     null,
     2
   )
 );
 
-console.log(`[android-www] ready at ${OUT}`);
+console.log(`[android-www] ready at ${OUT} (v${APP_VERSION})`);

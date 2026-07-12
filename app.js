@@ -1,3 +1,4 @@
+import { initializeAppUpdate } from "./client/app-update.js";
 import { fallbackAnime } from "./client/config.js";
 import { decorateAnime } from "./client/bangumi.js";
 import {
@@ -84,6 +85,7 @@ document.addEventListener("anime:watch-ended", () => {
 renderResults();
 initializeMobile();
 initializeMobileInstall();
+initializeAppUpdate();
 initializeDesktopNav();
 bindExploreNavigation();
 showAppVersion();

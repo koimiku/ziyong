@@ -32,4 +32,7 @@ export function applyTheme(mode) {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", resolvedTheme === "dark" ? "#f472b6" : "#2563eb");
+  document.dispatchEvent(
+    new CustomEvent("anime:theme-changed", { detail: { theme: resolvedTheme } })
+  );
 }

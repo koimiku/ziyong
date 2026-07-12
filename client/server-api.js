@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.0.3";
+export { APP_VERSION } from "./version.js";
 export const APP_PORT = 47890;
 
 export async function fetchServerInfo() {

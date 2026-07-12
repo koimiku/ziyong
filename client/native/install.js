@@ -8,6 +8,22 @@ export function isAndroidStandalone() {
   }
 }
 
+async function syncAndroidStatusBar(theme = document.documentElement.dataset.theme) {
+  if (!isAndroidStandalone()) return;
+  try {
+    const { StatusBar, Style } = await import("@capacitor/status-bar");
+    await StatusBar.setOverlaysWebView({ overlay: false });
+    await StatusBar.setStyle({
+      style: theme === "dark" ? Style.Light : Style.Dark,
+    });
+    await StatusBar.setBackgroundColor({
+      color: theme === "dark" ? "#121212" : "#ffffff",
+    });
+  } catch (error) {
+    console.warn("StatusBar setup skipped:", error);
+  }
+}
+
 export function installNativeApi() {
   if (!isAndroidStandalone()) return false;
   if (window.__animeNativeApiInstalled) return true;
@@ -31,6 +47,11 @@ export function installNativeApi() {
     }
     return originalFetch(input, init);
   };
+
+  void syncAndroidStatusBar();
+  document.addEventListener("anime:theme-changed", (event) => {
+    void syncAndroidStatusBar(event.detail?.theme);
+  });
 
   return true;
 }
