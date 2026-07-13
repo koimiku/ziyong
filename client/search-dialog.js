@@ -11,15 +11,44 @@ import { showDetails } from "./watch.js";
 const RECENT_KEY = "anime-search-recent";
 const MAX_RECENT = 8;
 const MAX_SUGGEST = 8;
+const MOBILE_QUERY = "(max-width: 780px)";
 
 let suggestItems = [];
 let activeIndex = -1;
 let suggestRequestId = 0;
 let debounceTimer = null;
+let activeSuggestEl = null;
+
+function isMobileLayout() {
+  return (
+    document.body.classList.contains("is-mobile") ||
+    document.body.classList.contains("is-android-app") ||
+    window.matchMedia(MOBILE_QUERY).matches
+  );
+}
+
+function getActiveInput() {
+  if (document.body.classList.contains("search-dialog-open")) {
+    return document.querySelector("#mobileSearchInput") || searchInput;
+  }
+  return searchInput;
+}
+
+function getActiveSuggest() {
+  if (document.body.classList.contains("search-dialog-open")) {
+    return document.querySelector("#mobileSearchSuggest");
+  }
+  return document.querySelector("#searchSuggest");
+}
 
 export function initializeSearchDialog() {
   const clearButton = document.querySelector("#searchClear");
   const suggestEl = document.querySelector("#searchSuggest");
+  const mobileForm = document.querySelector("#mobileSearchForm");
+  const mobileInput = document.querySelector("#mobileSearchInput");
+  const mobileSuggest = document.querySelector("#mobileSearchSuggest");
+  const backdrop = document.querySelector("#searchBackdrop");
+  const closeButton = document.querySelector("#searchClose");
 
   const triggers = [
     document.querySelector("#headerSearchButton"),
@@ -30,6 +59,9 @@ export function initializeSearchDialog() {
     trigger.addEventListener("click", () => openSearchDialog());
   });
 
+  closeButton?.addEventListener("click", closeSearchDialog);
+  backdrop?.addEventListener("click", closeSearchDialog);
+
   searchForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const query = searchInput.value.trim();
@@ -37,28 +69,68 @@ export function initializeSearchDialog() {
     commitSearch(query);
   });
 
-  searchInput?.addEventListener("input", () => {
-    syncClearButton();
-    scheduleSuggest(searchInput.value.trim());
+  mobileForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const query = mobileInput?.value.trim() || "";
+    if (!query) return;
+    commitSearch(query);
   });
 
-  searchInput?.addEventListener("focus", () => {
+  bindInputEvents(searchInput, suggestEl, clearButton);
+  bindInputEvents(mobileInput, mobileSuggest, null);
+
+  suggestEl?.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  mobileSuggest?.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+
+  suggestEl?.addEventListener("click", onSuggestClick);
+  mobileSuggest?.addEventListener("click", onSuggestClick);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.body.classList.contains("search-dialog-open")) {
+      event.preventDefault();
+      closeSearchDialog();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      openSearchDialog();
+    }
+  });
+
+  syncClearButton();
+}
+
+function bindInputEvents(input, suggestEl, clearButton) {
+  if (!input) return;
+
+  input.addEventListener("input", () => {
+    if (clearButton) syncClearButton();
+    scheduleSuggest(input.value.trim());
+  });
+
+  input.addEventListener("focus", () => {
     document.body.classList.add("search-focused");
-    const query = searchInput.value.trim();
+    activeSuggestEl = suggestEl;
+    const query = input.value.trim();
     if (query) scheduleSuggest(query);
     else renderSuggestPanel([], getRecentSearches());
   });
 
-  searchInput?.addEventListener("blur", () => {
+  input.addEventListener("blur", () => {
     window.setTimeout(() => {
-      if (document.activeElement === searchInput) return;
+      if (document.activeElement === input) return;
       if (suggestEl?.contains(document.activeElement)) return;
+      if (document.body.classList.contains("search-dialog-open")) return;
       hideSuggest();
       document.body.classList.remove("search-focused");
     }, 120);
   });
 
-  searchInput?.addEventListener("keydown", (event) => {
+  input.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
       moveActive(1);
@@ -70,8 +142,12 @@ export function initializeSearchDialog() {
       return;
     }
     if (event.key === "Escape") {
-      hideSuggest();
-      searchInput.blur();
+      if (document.body.classList.contains("search-dialog-open")) {
+        closeSearchDialog();
+      } else {
+        hideSuggest();
+        input.blur();
+      }
       return;
     }
     if (event.key === "Enter" && activeIndex >= 0 && suggestItems[activeIndex]) {
@@ -81,36 +157,44 @@ export function initializeSearchDialog() {
   });
 
   clearButton?.addEventListener("click", () => {
-    searchInput.value = "";
+    input.value = "";
     syncClearButton();
-    searchInput.focus();
+    input.focus();
     renderSuggestPanel([], getRecentSearches());
   });
+}
 
-  suggestEl?.addEventListener("mousedown", (event) => {
-    event.preventDefault();
-  });
-
-  suggestEl?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-suggest-index]");
-    if (!button) return;
-    const index = Number(button.dataset.suggestIndex);
-    if (!Number.isFinite(index) || !suggestItems[index]) return;
-    chooseSuggest(suggestItems[index]);
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      openSearchDialog();
-    }
-  });
-
-  syncClearButton();
+function onSuggestClick(event) {
+  const button = event.target.closest("[data-suggest-index]");
+  if (!button) return;
+  const index = Number(button.dataset.suggestIndex);
+  if (!Number.isFinite(index) || !suggestItems[index]) return;
+  chooseSuggest(suggestItems[index]);
 }
 
 export function openSearchDialog() {
   setAppView("explore");
+
+  if (isMobileLayout()) {
+    const dialog = document.querySelector("#searchDialog");
+    const backdrop = document.querySelector("#searchBackdrop");
+    const mobileInput = document.querySelector("#mobileSearchInput");
+    document.body.classList.add("search-dialog-open", "search-focused");
+    dialog?.classList.add("is-open");
+    backdrop?.classList.add("is-open");
+    if (searchInput?.value && mobileInput && !mobileInput.value) {
+      mobileInput.value = searchInput.value;
+    }
+    window.requestAnimationFrame(() => {
+      mobileInput?.focus();
+      mobileInput?.select();
+      const query = mobileInput?.value.trim() || "";
+      if (query) scheduleSuggest(query);
+      else renderSuggestPanel([], getRecentSearches());
+    });
+    return;
+  }
+
   document.querySelector(".header-search")?.scrollIntoView({
     behavior: "smooth",
     block: "center",
@@ -126,21 +210,30 @@ export function openSearchDialog() {
 
 export function closeSearchDialog() {
   hideSuggest();
+  const dialog = document.querySelector("#searchDialog");
+  const backdrop = document.querySelector("#searchBackdrop");
+  dialog?.classList.remove("is-open");
+  backdrop?.classList.remove("is-open");
+  document.body.classList.remove("search-dialog-open", "search-focused");
+  document.querySelector("#mobileSearchInput")?.blur();
   searchInput?.blur();
-  document.body.classList.remove("search-focused");
 }
 
 function commitSearch(query) {
   rememberRecent(query);
   hideSuggest();
+  if (searchInput) searchInput.value = query;
+  const mobileInput = document.querySelector("#mobileSearchInput");
+  if (mobileInput) mobileInput.value = query;
+  closeSearchDialog();
   setAppView("explore");
   runSearch(query);
-  searchInput?.blur();
 }
 
 function chooseSuggest(entry) {
+  const input = getActiveInput();
   if (entry.kind === "recent" || entry.kind === "query") {
-    searchInput.value = entry.title;
+    if (input) input.value = entry.title;
     syncClearButton();
     commitSearch(entry.title);
     return;
@@ -149,11 +242,12 @@ function chooseSuggest(entry) {
   if (entry.item) {
     rememberRecent(pickDisplayTitle(entry.item));
     hideSuggest();
-    searchInput.value = pickDisplayTitle(entry.item);
+    if (input) input.value = pickDisplayTitle(entry.item);
+    if (searchInput) searchInput.value = pickDisplayTitle(entry.item);
     syncClearButton();
+    closeSearchDialog();
     setAppView("explore");
     showDetails(entry.item);
-    searchInput.blur();
   }
 }
 
@@ -191,7 +285,7 @@ async function loadSuggestions(query) {
 }
 
 function renderSuggestPanel(items, recent = [], options = {}) {
-  const suggestEl = document.querySelector("#searchSuggest");
+  const suggestEl = getActiveSuggest() || activeSuggestEl || document.querySelector("#searchSuggest");
   if (!suggestEl) return;
 
   const rows = [];
@@ -260,24 +354,27 @@ function renderSuggestPanel(items, recent = [], options = {}) {
 
   suggestEl.innerHTML = `${body}${footer}`;
   suggestEl.hidden = false;
-  searchInput?.setAttribute("aria-expanded", "true");
+  getActiveInput()?.setAttribute("aria-expanded", "true");
 }
 
 function hideSuggest() {
-  const suggestEl = document.querySelector("#searchSuggest");
-  if (suggestEl) {
+  ["#searchSuggest", "#mobileSearchSuggest"].forEach((selector) => {
+    const suggestEl = document.querySelector(selector);
+    if (!suggestEl) return;
     suggestEl.hidden = true;
     suggestEl.innerHTML = "";
-  }
+  });
   suggestItems = [];
   activeIndex = -1;
   searchInput?.setAttribute("aria-expanded", "false");
+  document.querySelector("#mobileSearchInput")?.setAttribute("aria-expanded", "false");
 }
 
 function moveActive(delta) {
   if (!suggestItems.length) return;
   activeIndex = (activeIndex + delta + suggestItems.length) % suggestItems.length;
-  document.querySelectorAll(".search-suggest-item").forEach((button, index) => {
+  const root = getActiveSuggest();
+  root?.querySelectorAll(".search-suggest-item").forEach((button, index) => {
     const active = index === activeIndex;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", active ? "true" : "false");

@@ -1,7 +1,7 @@
 {
-  "version": "1.3.9",
-  "name": "v1.3.9",
-  "notes": "筛选/搜索按钮恢复蓝色，去掉手机点击闪白。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.3.9",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.3.9"
+  "version": "1.4.0",
+  "name": "v1.4.0",
+  "notes": "Bangumi 进度同步、修复手机搜索、更换应用图标。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.0",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.0"
 }

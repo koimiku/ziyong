@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setAppRoot, startServer } from "../server.mjs";
@@ -30,6 +31,13 @@ function resolveAppRoot() {
 }
 
 function splashHtml() {
+  const iconPath = path.join(resolveAppRoot(), "icons", "icon-192.png");
+  let iconSrc = "";
+  try {
+    iconSrc = `data:image/png;base64,${readFileSync(iconPath).toString("base64")}`;
+  } catch {
+    iconSrc = "";
+  }
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -47,16 +55,13 @@ function splashHtml() {
     }
     .box { text-align: center; }
     .mark {
-      width: 72px;
-      height: 72px;
+      width: 84px;
+      height: 84px;
       margin: 0 auto 18px;
-      border-radius: 18px;
-      display: grid;
-      place-items: center;
-      background: #2563eb;
-      color: #fff;
-      font-size: 34px;
-      font-weight: 800;
+      border-radius: 20px;
+      object-fit: cover;
+      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.16);
+      background: #e4573d;
     }
     h1 { margin: 0 0 8px; font-size: 28px; }
     p { margin: 0; color: #64748b; }
@@ -64,7 +69,7 @@ function splashHtml() {
 </head>
 <body>
   <div class="box">
-    <div class="mark">A</div>
+    ${iconSrc ? `<img class="mark" src="${iconSrc}" alt="" />` : `<div class="mark"></div>`}
     <h1>anime</h1>
     <p>正在启动...</p>
   </div>
@@ -81,6 +86,7 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: "anime",
+    icon: path.join(resolveAppRoot(), "icons", "icon.png"),
     frame: false,
     autoHideMenuBar: true,
     backgroundColor: "#eef3fb",

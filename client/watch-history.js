@@ -75,6 +75,78 @@ function saveHistory(list) {
   return next;
 }
 
+export function mergeExternalHistory(entries = []) {
+  if (!Array.isArray(entries) || !entries.length) return getWatchHistory();
+
+  const map = new Map();
+  readLocal().forEach((entry) => {
+    if (entry?.id != null) map.set(String(entry.id), entry);
+  });
+
+  entries.forEach((raw) => {
+    const remote = normalizeEntry(raw);
+    if (!remote) return;
+    const key = String(remote.id);
+    const local = map.get(key);
+    if (!local) {
+      map.set(key, remote);
+      return;
+    }
+
+    const localEp = resolveEpisodeNumber(local.progress) || 0;
+    const remoteEp = resolveEpisodeNumber(remote.progress) || 0;
+
+    if (remoteEp > localEp) {
+      map.set(
+        key,
+        normalizeEntry({
+          ...local,
+          ...remote,
+          title: local.title || remote.title,
+          title_cn: local.title_cn || remote.title_cn,
+          images: local.images?.large || local.images?.common ? local.images : remote.images,
+          progress: {
+            ...(remote.progress || {}),
+            // Keep finer local playback only when episode did not move forward.
+          },
+          watchedAt: Math.max(Number(local.watchedAt || 0), Number(remote.watchedAt || 0)),
+        })
+      );
+      return;
+    }
+
+    map.set(
+      key,
+      normalizeEntry({
+        ...local,
+        bangumi: remote.bangumi || local.bangumi,
+        images: local.images?.large || local.images?.common ? local.images : remote.images || local.images,
+        sourceUrl: local.sourceUrl || remote.sourceUrl,
+      })
+    );
+  });
+
+  return saveHistory([...map.values()]);
+}
+
+export function resolveEpisodeNumber(progress) {
+  if (!progress) return null;
+  const direct = Number(progress.episodeNumber);
+  if (Number.isFinite(direct) && direct > 0) return Math.floor(direct);
+
+  const fromLabel = String(progress.episodeLabel || "").match(/(\d{1,4})/);
+  if (fromLabel) {
+    const value = Number(fromLabel[1]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+
+  const fromNid = Number(progress.episodeNid);
+  if (Number.isFinite(fromNid) && fromNid > 0 && fromNid < 10000) {
+    return Math.floor(fromNid);
+  }
+  return null;
+}
+
 function scheduleServerSync(list = readLocal()) {
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
@@ -203,6 +275,12 @@ export function recordWatchProgress(itemId, progressPatch) {
 
   list.sort((a, b) => Number(b.watchedAt || 0) - Number(a.watchedAt || 0));
   saveHistory(list);
+
+  import("./bangumi-sync.js")
+    .then(({ scheduleBangumiProgressPush }) => {
+      scheduleBangumiProgressPush(itemId, list.find((row) => row.id === itemId)?.progress);
+    })
+    .catch(() => {});
 }
 
 export function getWatchProgress(itemId) {

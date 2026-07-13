@@ -289,6 +289,28 @@
               <a class="ghost-button settings-update-link" id="settingsOpenReleases" href="https://github.com/koimiku/ziyong/releases" target="_blank" rel="noreferrer">打开 Releases</a>
             </div>
           </div>
+          <div class="settings-card" id="bangumiSyncCard">
+            <h3>Bangumi 同步</h3>
+            <p class="settings-update-desc">
+              像 Animeko 一样用 Bangumi 账号同步<strong>番剧看到第几集</strong>（电脑/手机同一账号）。特摄与集内秒数仍只保存在本机。
+            </p>
+            <p id="bangumiUserLine">未登录</p>
+            <p class="settings-update-status" id="bangumiSyncStatus"></p>
+            <label class="bangumi-token-label" for="bangumiTokenInput">Access Token</label>
+            <input
+              id="bangumiTokenInput"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="粘贴 Access Token"
+            />
+            <div class="settings-update-actions bangumi-sync-actions">
+              <button class="small-button" id="bangumiLoginButton" type="button">登录并同步</button>
+              <button class="small-button" id="bangumiSyncButton" type="button" hidden>立即同步</button>
+              <button class="ghost-button" id="bangumiLogoutButton" type="button" hidden>退出登录</button>
+              <a class="ghost-button settings-update-link" id="bangumiOpenTokenPage" href="https://next.bgm.tv/demo/access-token" target="_blank" rel="noreferrer">获取 Token</a>
+            </div>
+          </div>
           <div class="settings-card">
             <h3>外观</h3>
             <label for="themeSelect">主题</label>
@@ -338,6 +360,31 @@
         <div class="segmented mobile-type-tabs"></div>
       </aside>
     </main>
+
+    <div class="search-backdrop" id="searchBackdrop"></div>
+    <div class="search-dialog" id="searchDialog" role="dialog" aria-modal="true" aria-label="搜索">
+      <form class="search-dialog-form" id="mobileSearchForm" role="search" autocomplete="off">
+        <div class="search-dialog-field">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
+          <input
+            id="mobileSearchInput"
+            type="search"
+            placeholder="搜索番剧名、别名..."
+            autocomplete="off"
+            enterkeyhint="search"
+            aria-autocomplete="list"
+            aria-controls="mobileSearchSuggest"
+            aria-expanded="false"
+          />
+        </div>
+        <div class="search-suggest search-dialog-suggest" id="mobileSearchSuggest" role="listbox" hidden></div>
+        <div class="search-dialog-actions">
+          <button class="small-button" type="submit">搜索</button>
+          <button class="ghost-button" id="searchClose" type="button">取消</button>
+        </div>
+        <p class="search-dialog-tip">支持番剧与特摄分区搜索</p>
+      </form>
+    </div>
 
     <div class="lan-connect-backdrop" id="lanConnectBackdrop"></div>
     <section class="lan-connect-dialog" id="lanConnectDialog" aria-label="手机连接">

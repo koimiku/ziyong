@@ -34,7 +34,10 @@ function handleAndroidBack(App) {
     return;
   }
 
-  if (document.body.classList.contains("search-focused")) {
+  if (
+    document.body.classList.contains("search-dialog-open") ||
+    document.body.classList.contains("search-focused")
+  ) {
     closeSearchDialog();
     return;
   }

@@ -125,6 +125,16 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     embed.src = "about:blank";
   }
 
+  function resolvePlayEpisodeNumber(episode, source) {
+    const fromLabel = String(episode?.label || "").match(/(\d{1,4})/);
+    if (fromLabel) {
+      const value = Number(fromLabel[1]);
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+    if (episode?.nid != null && Number(episode.nid) > 0) return Number(episode.nid);
+    return Number(source?.episodeIndex || 0) + 1;
+  }
+
   function saveProgress(force = false) {
     if (!itemId) return;
     const episode = currentEpisode();
@@ -135,10 +145,12 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     const position = Number(video.currentTime || 0);
     const duration = Number(video.duration || 0);
     if (!force && duration > 0 && position < 3) return;
+    const episodeNumber = resolvePlayEpisodeNumber(episode, source);
     if (!force && duration > 0 && position / duration > 0.98) {
       recordWatchProgress(itemId, {
         episodeLabel: episode.label,
         episodeNid: episode.nid ?? source.episodeIndex,
+        episodeNumber,
         position: 0,
         duration,
         percent: 100,
@@ -153,6 +165,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     recordWatchProgress(itemId, {
       episodeLabel: episode.label,
       episodeNid: episode.nid ?? source.episodeIndex,
+      episodeNumber,
       position,
       duration,
       sourceId: source.sourceId,

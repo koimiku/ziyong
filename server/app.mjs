@@ -13,6 +13,7 @@ import {
   handleTokuzillaLatest,
 } from "./handlers.mjs";
 import { handleBangumiCalendar, warmupBangumiCalendar } from "./bangumi.mjs";
+import { handleBangumiGateway } from "./bangumi-gateway.mjs";
 import {
   handleMiruInstall,
   handleMiruInstalled,
@@ -74,6 +75,11 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
 
       if (url.pathname === "/api/bangumi/calendar") {
         await handleBangumiCalendar(url, response);
+        return;
+      }
+
+      if (url.pathname.startsWith("/api/bangumi/v0")) {
+        await handleBangumiGateway(request, response, url);
         return;
       }
 

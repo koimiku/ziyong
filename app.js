@@ -22,6 +22,7 @@ import { state } from "./client/state.js";
 import { initializeTheme, setThemeMode } from "./client/theme.js";
 import { initializeWindowChrome } from "./client/window-chrome.js";
 import { initializeWatchHistory } from "./client/watch-history.js";
+import { initializeBangumiSettings } from "./client/bangumi-settings.js";
 import { installNativeApi, isAndroidStandalone } from "./client/native/install.js";
 
 function showBootError(error) {
@@ -51,6 +52,7 @@ try {
       if (!state.query) renderResults();
     })
     .catch((error) => console.warn(error));
+  initializeBangumiSettings();
 
   document.addEventListener("anime:history-changed", () => {
     if (!state.query && !document.body.classList.contains("is-browsing-hero")) {

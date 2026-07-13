@@ -688,6 +688,28 @@ body.is-android-app .desktop-titlebar {
   display: grid;
 }
 
+.search-dialog-suggest {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
+  margin-top: 12px;
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+
+body.is-mobile .search-dialog,
+body.is-android-app .search-dialog {
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 20px;
+  align-items: start;
+}
+
+body.is-mobile .search-dialog-form,
+body.is-android-app .search-dialog-form {
+  width: 100%;
+}
+
 .search-dialog-form {
   width: min(100%, 560px);
   padding: 22px;
@@ -1252,6 +1274,23 @@ body.search-dialog-open {
 .miru-view .miru-panel-header h3 {
   margin-bottom: 12px;
   font-size: 18px;
+}
+
+#bangumiSyncCard .bangumi-token-label {
+  display: block;
+  margin: 10px 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#bangumiTokenInput {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 12px;
+}
+
+.bangumi-sync-actions {
+  flex-wrap: wrap;
 }
 
 .results-view {
