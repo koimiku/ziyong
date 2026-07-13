@@ -1,10 +1,10 @@
 {
   "name": "anime",
-  "version": "1.3.8",
+  "version": "1.3.9",
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
-  "description": "anime - 番剧搜索与多源播放",
+  "description": "anime - 番剧搜索与多源播�?,
   "author": "Anime",
   "scripts": {
     "start": "node server.mjs",

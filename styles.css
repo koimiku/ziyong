@@ -255,6 +255,21 @@ select {
 button {
   border: 0;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a,
+button,
+[role="button"],
+.media-card,
+.mobile-nav button,
+.icon-button,
+.ghost-button,
+.small-button,
+.partition-button,
+.rail-button {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 .app-shell {
@@ -1409,10 +1424,12 @@ select:focus {
   font-size: 24px;
 }
 
-.icon-button:hover,
-.small-button:hover,
-.watch-link:hover {
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .icon-button:hover,
+  .small-button:hover,
+  .watch-link:hover {
+    transform: translateY(-1px);
+  }
 }
 
 .segmented {
@@ -2775,6 +2792,25 @@ body.app-update-open {
     --mobile-nav-clearance: calc(82px + env(safe-area-inset-bottom, 0px));
   }
 
+  button:focus,
+  a:focus,
+  [role="button"]:focus {
+    outline: none;
+    box-shadow: none;
+  }
+
+  button:active,
+  .ghost-button:active,
+  .small-button:active,
+  .partition-button:active,
+  .rail-button:active,
+  .mobile-nav button:active,
+  .segmented button:active {
+    transform: none;
+    filter: none;
+    opacity: 1;
+  }
+
   body.is-mobile {
     min-height: 100dvh;
     padding-bottom: 0;
@@ -2854,8 +2890,16 @@ body.app-update-open {
     padding: 0;
     border-radius: 14px;
     flex-shrink: 0;
-    background: var(--subtle-bg);
+    background: var(--accent);
+    color: #fff;
     border: 1px solid transparent;
+    box-shadow: none;
+  }
+
+  .mobile-search-button:active,
+  .mobile-menu-button:active {
+    background: var(--accent-2);
+    transform: none;
   }
 
   .mobile-search-button svg,
@@ -2925,6 +2969,16 @@ body.app-update-open {
     color: var(--muted);
     font-size: 11px;
     font-weight: 600;
+  }
+
+  .mobile-nav button:active {
+    background: transparent;
+    color: var(--muted);
+  }
+
+  .mobile-nav button.active:active {
+    background: var(--tab-active-bg);
+    color: var(--accent);
   }
 
   .mobile-nav button svg {
