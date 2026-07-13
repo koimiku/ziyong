@@ -6,18 +6,25 @@ export function isAndroidStandalone() {
   }
 }
 
-async function syncAndroidStatusBar(theme = document.documentElement.dataset.theme) {
+function resolveTheme() {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+export async function syncAndroidStatusBar(theme = resolveTheme()) {
   if (!isAndroidStandalone()) return;
+  const StatusBar = window.Capacitor?.Plugins?.StatusBar;
+  if (!StatusBar) return;
+
+  const dark = theme === "dark";
+  const background = dark ? "#0B0D12" : "#F3F5F8";
+
   try {
-    const StatusBar = window.Capacitor?.Plugins?.StatusBar;
-    if (!StatusBar) return;
+    // Force a dedicated system bar area (not drawn under the WebView).
     await StatusBar.setOverlaysWebView?.({ overlay: false });
-    await StatusBar.setStyle?.({
-      style: theme === "dark" ? "LIGHT" : "DARK",
-    });
-    await StatusBar.setBackgroundColor?.({
-      color: theme === "dark" ? "#121212" : "#ffffff",
-    });
+    await StatusBar.setBackgroundColor?.({ color: background });
+    // DARK = dark icons for light bg; LIGHT = light icons for dark bg.
+    await StatusBar.setStyle?.({ style: dark ? "LIGHT" : "DARK" });
+    await StatusBar.show?.();
   } catch (error) {
     console.warn("StatusBar setup skipped:", error);
   }
@@ -48,9 +55,16 @@ export function installNativeApi() {
     return originalFetch(input, init);
   };
 
-  void syncAndroidStatusBar();
+  const applyBar = () => void syncAndroidStatusBar();
+  applyBar();
+  // Bridge / theme may finish after first paint.
+  window.setTimeout(applyBar, 120);
+  window.setTimeout(applyBar, 600);
   document.addEventListener("anime:theme-changed", (event) => {
     void syncAndroidStatusBar(event.detail?.theme);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) applyBar();
   });
 
   return true;

@@ -76,7 +76,6 @@ export function updateSearchChrome() {
   const showBack = Boolean(state.query) || state.browseMode === "hero";
   document.querySelector("#backToExplore")?.toggleAttribute("hidden", !showBack);
   document.querySelector("#searchBackButton")?.toggleAttribute("hidden", !showBack);
-  document.querySelector("#mobileBackButton")?.toggleAttribute("hidden", !showBack);
 }
 
 const EXPLORE_QUERIES = [

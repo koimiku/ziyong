@@ -16,7 +16,6 @@ export function bindExploreNavigation() {
     document.querySelector("#homeButton"),
     document.querySelector("#backToExplore"),
     document.querySelector("#searchBackButton"),
-    document.querySelector("#mobileBackButton"),
   ];
 
   triggers.forEach((trigger) => {

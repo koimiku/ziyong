@@ -265,9 +265,9 @@ function createSourceCard(item) {
         : "安装";
 
   const mark = document.createElement("div");
-  mark.className = "source-card-mark";
+  mark.className = `source-card-mark source-card-mark--${resolveSourceIconKey(item)}`;
   mark.setAttribute("aria-hidden", "true");
-  mark.textContent = String(item.name || "?").slice(0, 1);
+  mark.innerHTML = sourceIconSvg(resolveSourceIconKey(item));
 
   const body = document.createElement("div");
   body.className = "source-card-body";
@@ -459,6 +459,37 @@ function updateCardAfterAction(card, packageName, installed) {
       badge.title = "";
     }
   }
+}
+
+function resolveSourceIconKey(item) {
+  const id = String(item.package || item.id || item.healthTarget || "").toLowerCase();
+  const name = String(item.name || "").toLowerCase();
+  if (item.type === "tokusatsu" || id.includes("tokuzilla") || name.includes("tokuzilla")) {
+    return "tokusatsu";
+  }
+  if (id.includes("xfdm") || name.includes("稀饭")) return "xfdm";
+  if (id.includes("gugu") || name.includes("咕咕")) return "gugu";
+  if (id.includes("omo") || name.includes("omofun")) return "omofun";
+  if (item.type === "builtin") return "builtin";
+  if (item.type === "bt") return "bt";
+  if (item.type === "manga") return "manga";
+  if (item.type === "bangumi" || id.startsWith("miru:")) return "miru";
+  return "default";
+}
+
+function sourceIconSvg(key) {
+  const icons = {
+    xfdm: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 6.5h14v11H5v-11Z" stroke="currentColor" stroke-width="1.7"/><path d="m10 9.5 5 2.5-5 2.5v-5Z" fill="currentColor"/></svg>`,
+    gugu: `<svg viewBox="0 0 24 24" fill="none"><path d="M6.5 16.5c2.2 1.6 4.3 2.3 5.5 2.3s3.3-.7 5.5-2.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="10.5" r="1.2" fill="currentColor"/><circle cx="15" cy="10.5" r="1.2" fill="currentColor"/><path d="M7 8.2C8.2 6.4 10 5.4 12 5.4s3.8 1 5 2.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+    omofun: `<svg viewBox="0 0 24 24" fill="none"><path d="M4.5 8.5 12 4.8l7.5 3.7v6.9L12 19.2 4.5 15.4V8.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 8.2v7.5M8.8 10.2 15.2 13.6M15.2 10.2 8.8 13.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    tokusatsu: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.8 19 7v5.4c0 4.1-2.8 7.5-7 8.8-4.2-1.3-7-4.7-7-8.8V7l7-3.2Z" stroke="currentColor" stroke-width="1.7"/><path d="M9.2 12.2 11 14l3.8-4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    miru: `<svg viewBox="0 0 24 24" fill="none"><path d="M8 4.8h3.2L12 7l.8-2.2H16v3.2L18.2 9 16 10.8v3.2h-3.2L12 16.2 11.2 14H8v-3.2L5.8 9 8 7.2V4.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+    manga: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 5.5h5.2c1.4 0 2.3.8 2.8 1.5.5-.7 1.4-1.5 2.8-1.5H22v13h-5.2c-1.4 0-2.3.5-2.8 1.1-.5-.6-1.4-1.1-2.8-1.1H6v-13Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+    bt: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 4.5v9.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m8.8 10.2 3.2 3.5 3.2-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.2 16.8h11.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+    builtin: `<svg viewBox="0 0 24 24" fill="none"><path d="M4.8 10.8 12 5.5l7.2 5.3V18a1.2 1.2 0 0 1-1.2 1.2H6a1.2 1.2 0 0 1-1.2-1.2v-7.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`,
+    default: `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7.2" stroke="currentColor" stroke-width="1.7"/><path d="M10.2 12a1.8 1.8 0 1 0 3.6 0 1.8 1.8 0 0 0-3.6 0Z" fill="currentColor"/></svg>`,
+  };
+  return icons[key] || icons.default;
 }
 
 function escape(value) {

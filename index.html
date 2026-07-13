@@ -3,11 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#2563eb" />
+    <meta name="theme-color" content="#F3F5F8" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="anime" />
     <title>anime - 动漫搜索</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
@@ -41,11 +47,8 @@
     </header>
 
     <header class="mobile-header" id="mobileHeader" aria-label="手机导航">
-      <button class="icon-button mobile-back-button" id="mobileBackButton" type="button" aria-label="返回探索" hidden>
-        <span aria-hidden="true">←</span>
-      </button>
       <button class="icon-button mobile-menu-button" id="mobileMenuButton" type="button" aria-label="筛选">
-        <span aria-hidden="true">☰</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v1.8H4V7Zm0 4.1h16v1.8H4v-1.8Zm0 4.1h16V17H4v-1.8Z"/></svg>
       </button>
       <div class="mobile-header-partition icon-rail-partition" id="mobileContentModeToggle" role="group" aria-label="内容分区">
         <button class="partition-button active" type="button" data-content-mode="anime" title="动漫">漫</button>
