@@ -1,5 +1,6 @@
 package com.anime.standalone;
 
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import androidx.core.view.WindowCompat;
@@ -10,15 +11,21 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Keep WebView below the system bars so clock/battery stay visible.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
-        getWindow().setStatusBarColor(Color.parseColor("#F3F5F8"));
-        getWindow().setNavigationBarColor(Color.parseColor("#F3F5F8"));
+
+        boolean night =
+            (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+        int barColor = Color.parseColor(night ? "#0B0D12" : "#F3F5F8");
+        getWindow().setStatusBarColor(barColor);
+        getWindow().setNavigationBarColor(barColor);
+
         WindowInsetsControllerCompat controller =
             WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (controller != null) {
-            controller.setAppearanceLightStatusBars(true);
-            controller.setAppearanceLightNavigationBars(true);
+            // true = dark icons for light bars
+            controller.setAppearanceLightStatusBars(!night);
+            controller.setAppearanceLightNavigationBars(!night);
         }
     }
 }

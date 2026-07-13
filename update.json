@@ -1,7 +1,7 @@
 {
-  "version": "1.3.7",
-  "name": "v1.3.7",
-  "notes": "修复私有仓库下更新检查 404；请将仓库设为 Public 后自动检查即可生效。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.3.7",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.3.7"
+  "version": "1.3.8",
+  "name": "v1.3.8",
+  "notes": "修复状态栏可见性、固定签名以便覆盖安装、优化手机布局。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.3.8",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.3.8"
 }

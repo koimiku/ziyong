@@ -7,8 +7,8 @@ android {
         applicationId "com.anime.standalone"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.3.7"
+        versionCode 10
+        versionName "1.3.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +16,20 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        upload {
+            storeFile file("keystore/upload.keystore")
+            storePassword "anime123456"
+            keyAlias "anime"
+            keyPassword "anime123456"
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.upload
+        }
         release {
+            signingConfig signingConfigs.upload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

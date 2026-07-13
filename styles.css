@@ -3069,52 +3069,58 @@ body.app-update-open {
     display: none !important;
   }
 
-  body.is-mobile .stage-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-
-  body.is-mobile .header-search {
-    display: block;
-    max-width: none;
-    justify-self: stretch;
-  }
-
-  body.is-mobile .header-search-trigger {
-    display: none;
-  }
-
-  body.is-mobile .mobile-server-hint {
-    display: block;
-    margin: -4px 0 12px;
-    font-size: 12px;
-    color: var(--muted);
-    line-height: 1.45;
-  }
-
-  body.is-mobile .mobile-server-hint a {
-    color: var(--accent);
-    font-weight: 600;
-  }
-
   body.is-mobile .mobile-header-partition {
     flex-direction: row;
     margin: 0 auto;
   }
 
   body.is-mobile .mobile-header-partition .partition-button {
-    width: 38px;
+    width: 40px;
     height: 34px;
   }
 
+  body.is-mobile .stage-header {
+    display: none;
+  }
+
+  body.is-mobile.is-searching .stage-header,
+  body.is-mobile.is-browsing-hero .stage-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  body.is-mobile .stage-header .eyebrow,
+  body.is-mobile .stage-header .app-version,
+  body.is-mobile .header-search {
+    display: none !important;
+  }
+
+  body.is-mobile .stage-header-main h2 {
+    font-size: clamp(22px, 6vw, 28px);
+    margin: 0;
+  }
+
+  body.is-mobile .back-to-explore {
+    margin-bottom: 4px;
+  }
+
+  body.is-mobile .status-line {
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  body.is-mobile .mobile-server-hint {
+    display: none;
+  }
+
   body.is-mobile .dashboard {
-    gap: 22px;
+    gap: 18px;
   }
 
   body.is-mobile .media-row-head h3 {
-    font-size: 18px;
+    font-size: 17px;
   }
 
   body.is-mobile .media-row-scroller {
@@ -3126,20 +3132,42 @@ body.app-update-open {
   }
 
   body.is-mobile .media-row-track--hero .hero-card {
-    width: min(280px, 78vw);
+    width: min(260px, 72vw);
   }
 
   body.is-mobile .media-row-track .anime-card {
-    width: min(148px, 42vw);
+    width: min(132px, 38vw);
   }
 
-  body.is-mobile .recommend-grid {
+  body.is-mobile .recommend-grid,
+  body.is-mobile .results-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
   body.is-mobile .recommend-grid .anime-card {
     width: auto;
+  }
+
+  body.is-mobile .sources-card-grid,
+  body.is-mobile.mobile-sources-mode .sources-panel-builtin .sources-card-grid,
+  body.is-mobile.mobile-sources-mode .sources-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.is-mobile .source-card {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  body.is-mobile .settings-card {
+    padding: 14px;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+
+  body.is-mobile .main-stage {
+    padding: 12px 14px calc(18px + var(--mobile-nav-clearance));
   }
 
   body.is-mobile .settings-view {

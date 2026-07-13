@@ -19,11 +19,10 @@ export async function syncAndroidStatusBar(theme = resolveTheme()) {
   const background = dark ? "#0B0D12" : "#F3F5F8";
 
   try {
-    // Force a dedicated system bar area (not drawn under the WebView).
     await StatusBar.setOverlaysWebView?.({ overlay: false });
     await StatusBar.setBackgroundColor?.({ color: background });
-    // DARK = dark icons for light bg; LIGHT = light icons for dark bg.
-    await StatusBar.setStyle?.({ style: dark ? "LIGHT" : "DARK" });
+    // Capacitor: DARK = light icons (dark bg); LIGHT = dark icons (light bg).
+    await StatusBar.setStyle?.({ style: dark ? "DARK" : "LIGHT" });
     await StatusBar.show?.();
   } catch (error) {
     console.warn("StatusBar setup skipped:", error);
@@ -57,7 +56,6 @@ export function installNativeApi() {
 
   const applyBar = () => void syncAndroidStatusBar();
   applyBar();
-  // Bridge / theme may finish after first paint.
   window.setTimeout(applyBar, 120);
   window.setTimeout(applyBar, 600);
   document.addEventListener("anime:theme-changed", (event) => {

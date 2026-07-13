@@ -1,6 +1,7 @@
 import { appShell } from "./dom.js";
 import { setAppView } from "./app-nav.js";
 import { setThemeMode } from "./theme.js";
+import { isAndroidStandalone } from "./native/install.js";
 
 const MOBILE_QUERY = "(max-width: 780px)";
 let mobileQuery = null;
@@ -15,14 +16,28 @@ export function initializeMobile() {
   setupMobileControls();
   loadServerInfo();
 
-  if (mobileQuery.matches) {
+  if (isPhoneLayout()) {
     setAppView("explore");
   }
 }
 
+function isPhoneLayout() {
+  return Boolean(mobileQuery?.matches || isAndroidStandalone() || document.body.classList.contains("is-android-app"));
+}
+
+function scrollMainStage(top = 0) {
+  const stage = document.querySelector(".main-stage");
+  if (stage) {
+    stage.scrollTo({ top, behavior: "smooth" });
+    return;
+  }
+  window.scrollTo({ top, behavior: "smooth" });
+}
+
 function applyMobileMode() {
-  document.body.classList.toggle("is-mobile", mobileQuery.matches);
-  if (!mobileQuery.matches) {
+  const mobile = isPhoneLayout();
+  document.body.classList.toggle("is-mobile", mobile);
+  if (!mobile) {
     appShell.classList.remove("mobile-panel-open");
     document.body.classList.remove("mobile-drawer-open", "mobile-sources-mode", "mobile-settings-mode");
     return;
@@ -56,19 +71,19 @@ function setupBottomNav() {
         return;
       }
       setAppView("explore");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollMainStage(0);
       return;
     }
 
     if (tab === "miru") {
       setAppView("miru");
-      document.querySelector("#miruView")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollMainStage(0);
       return;
     }
 
     if (tab === "settings") {
       setAppView("settings");
-      document.querySelector("#settingsView")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollMainStage(0);
     }
   });
 }
@@ -190,7 +205,7 @@ async function loadServerInfo() {
 }
 
 export function syncMobileWatchState() {
-  if (!window.matchMedia(MOBILE_QUERY).matches) return;
+  if (!isPhoneLayout() && !window.matchMedia(MOBILE_QUERY).matches) return;
   const watching = appShell.classList.contains("is-watching");
   document.body.classList.toggle("mobile-watching", watching);
   if (watching) {
