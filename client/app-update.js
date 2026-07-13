@@ -1,3 +1,4 @@
+import { CapacitorHttp } from "@capacitor/core";
 import { isAndroidStandalone } from "./native/install.js";
 import { APP_VERSION, GITHUB_REPO, GITHUB_RELEASES_URL } from "./version.js";
 
@@ -6,6 +7,7 @@ const CHECKED_KEY = "anime-update-checked-at";
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 let latestRelease = null;
+let lastCheckError = "";
 
 export function initializeAppUpdate() {
   const backdrop = document.querySelector("#appUpdateBackdrop");
@@ -39,7 +41,11 @@ export function initializeAppUpdate() {
     try {
       const release = await fetchLatestRelease({ force: true });
       if (!release) {
-        setUpdateStatus("暂时无法检查更新，请稍后再试。");
+        setUpdateStatus(
+          lastCheckError
+            ? `检查失败：${lastCheckError}。可到 GitHub Releases 手动下载。`
+            : "暂时无法检查更新，请检查网络后重试，或到 GitHub Releases 手动下载。"
+        );
         return;
       }
       if (!isNewerVersion(release.version, APP_VERSION)) {
@@ -102,35 +108,151 @@ function markChecked() {
 }
 
 async function fetchLatestRelease({ force = false } = {}) {
-  try {
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
-      {
-        headers: { Accept: "application/vnd.github+json" },
-        cache: force ? "no-store" : "default",
+  lastCheckError = "";
+  const errors = [];
+
+  const attempts = [
+    () => fetchGithubLatestRelease(),
+    () => fetchGithubReleasesList(),
+    () => fetchPackageJsonRelease(),
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const release = await attempt();
+      if (release?.version) {
+        latestRelease = release;
+        return release;
       }
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    const version = normalizeVersion(data.tag_name || data.name || "");
-    if (!version) return null;
-
-    const apkAsset = (data.assets || []).find((asset) =>
-      /\.apk$/i.test(asset.name || "")
-    );
-
-    latestRelease = {
-      version,
-      name: data.name || `v${version}`,
-      notes: String(data.body || "").trim(),
-      htmlUrl: data.html_url || GITHUB_RELEASES_URL,
-      apkUrl: apkAsset?.browser_download_url || "",
-    };
-    return latestRelease;
-  } catch (error) {
-    console.warn("Update check failed:", error);
-    return null;
+    } catch (error) {
+      const message = String(error?.message || error);
+      errors.push(message);
+      console.warn("Update check attempt failed:", message);
+    }
   }
+
+  lastCheckError = errors[0] || "网络不可用";
+  return null;
+}
+
+async function fetchGithubLatestRelease() {
+  const data = await getJson(
+    `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+  );
+  return parseGithubRelease(data);
+}
+
+async function fetchGithubReleasesList() {
+  const list = await getJson(
+    `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=5`
+  );
+  if (!Array.isArray(list) || !list.length) {
+    throw new Error("Release 列表为空");
+  }
+  const release = list.find((item) => !item.draft && !item.prerelease) || list[0];
+  return parseGithubRelease(release);
+}
+
+async function fetchPackageJsonRelease() {
+  const urls = [
+    `https://cdn.jsdelivr.net/gh/${GITHUB_REPO}@main/package.json`,
+    `https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json`,
+  ];
+
+  let data = null;
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      data = await getJson(url);
+      if (data?.version) break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!data?.version) {
+    throw lastError || new Error("无法读取 package.json 版本");
+  }
+
+  const version = normalizeVersion(data.version);
+  return {
+    version,
+    name: `v${version}`,
+    notes: "检测到仓库版本更新，请下载最新 APK 安装。",
+    htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: `https://github.com/${GITHUB_REPO}/releases/download/v${version}/app-debug.apk`,
+  };
+}
+
+function parseGithubRelease(data) {
+  if (!data || typeof data !== "object") {
+    throw new Error("Release 数据无效");
+  }
+  const version = normalizeVersion(data.tag_name || data.name || "");
+  if (!version) throw new Error("Release 无版本号");
+
+  const apkAsset = (data.assets || []).find((asset) =>
+    /\.apk$/i.test(asset.name || "")
+  );
+
+  return {
+    version,
+    name: data.name || `v${version}`,
+    notes: String(data.body || "").trim(),
+    htmlUrl: data.html_url || `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl:
+      apkAsset?.browser_download_url ||
+      `https://github.com/${GITHUB_REPO}/releases/download/v${version}/app-debug.apk`,
+  };
+}
+
+async function getJson(url) {
+  if (isAndroidStandalone()) {
+    try {
+      return await getJsonNative(url);
+    } catch (error) {
+      // fall through to fetch
+      console.warn("CapacitorHttp failed, fallback fetch:", error);
+    }
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "anime-android-update/1.3",
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+async function getJsonNative(url) {
+  const response = await CapacitorHttp.get({
+    url,
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "anime-android-update/1.3",
+    },
+    connectTimeout: 15000,
+    readTimeout: 20000,
+    responseType: "json",
+  });
+
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const data = response.data;
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data);
+    } catch {
+      throw new Error("返回内容不是 JSON");
+    }
+  }
+  return data;
 }
 
 function showUpdateDialog(release) {

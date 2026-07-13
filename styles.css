@@ -1682,6 +1682,21 @@ body.lan-dialog-open .mobile-nav {
   font-weight: 600;
 }
 
+.settings-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+a.settings-update-link {
+  display: inline-grid;
+  place-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
 body.app-update-open {
   overflow: hidden;
 }

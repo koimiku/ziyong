@@ -277,9 +277,12 @@
           </div>
           <div class="settings-card" id="androidUpdateCard">
             <h3>应用更新</h3>
-            <p class="settings-update-desc">检查 GitHub Release 是否有新版本，可选择更新或暂不更新。</p>
+            <p class="settings-update-desc">检查 GitHub Release 是否有新版本。若检查失败，可打开 Releases 页手动下载 APK。</p>
             <p class="settings-update-status" id="settingsUpdateStatus" hidden></p>
-            <button class="small-button" id="settingsCheckUpdate" type="button">检查更新</button>
+            <div class="settings-update-actions">
+              <button class="small-button" id="settingsCheckUpdate" type="button">检查更新</button>
+              <a class="ghost-button settings-update-link" id="settingsOpenReleases" href="https://github.com/koimiku/ziyong/releases" target="_blank" rel="noreferrer">打开 Releases</a>
+            </div>
           </div>
           <div class="settings-card">
             <h3>外观</h3>
