@@ -9,18 +9,16 @@ let installed = false;
 
 export function initializeAndroidBackButton() {
   if (!isAndroidStandalone() || installed) return;
-  installed = true;
+  const App = window.Capacitor?.Plugins?.App;
+  if (!App?.addListener) {
+    console.warn("Android back button unavailable: App plugin missing");
+    return;
+  }
 
-  import("@capacitor/app")
-    .then(({ App }) => {
-      App.addListener("backButton", () => {
-        handleAndroidBack(App);
-      });
-    })
-    .catch((error) => {
-      installed = false;
-      console.warn("Android back button setup failed:", error);
-    });
+  installed = true;
+  App.addListener("backButton", () => {
+    handleAndroidBack(App);
+  });
 }
 
 function handleAndroidBack(App) {
@@ -62,5 +60,5 @@ function handleAndroidBack(App) {
     return;
   }
 
-  App.exitApp();
+  App.exitApp?.();
 }

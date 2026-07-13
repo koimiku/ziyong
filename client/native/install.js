@@ -11,12 +11,13 @@ export function isAndroidStandalone() {
 async function syncAndroidStatusBar(theme = document.documentElement.dataset.theme) {
   if (!isAndroidStandalone()) return;
   try {
-    const { StatusBar, Style } = await import("@capacitor/status-bar");
-    await StatusBar.setOverlaysWebView({ overlay: false });
-    await StatusBar.setStyle({
-      style: theme === "dark" ? Style.Light : Style.Dark,
+    const StatusBar = window.Capacitor?.Plugins?.StatusBar;
+    if (!StatusBar) return;
+    await StatusBar.setOverlaysWebView?.({ overlay: false });
+    await StatusBar.setStyle?.({
+      style: theme === "dark" ? "LIGHT" : "DARK",
     });
-    await StatusBar.setBackgroundColor({
+    await StatusBar.setBackgroundColor?.({
       color: theme === "dark" ? "#121212" : "#ffffff",
     });
   } catch (error) {

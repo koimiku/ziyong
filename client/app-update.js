@@ -1,4 +1,3 @@
-import { CapacitorHttp } from "@capacitor/core";
 import { isAndroidStandalone } from "./native/install.js";
 import { APP_VERSION, GITHUB_REPO, GITHUB_RELEASES_URL } from "./version.js";
 
@@ -67,15 +66,10 @@ export function initializeAppUpdate() {
 
   void checkForAppUpdate();
 
-  try {
-    import("@capacitor/app").then(({ App }) => {
-      App.addListener("appStateChange", ({ isActive }) => {
-        if (isActive) void checkForAppUpdate();
-      });
-    });
-  } catch {
-    // ignore
-  }
+  const App = window.Capacitor?.Plugins?.App;
+  App?.addListener?.("appStateChange", ({ isActive }) => {
+    if (isActive) void checkForAppUpdate();
+  });
 }
 
 export async function checkForAppUpdate({ force = false } = {}) {
@@ -107,7 +101,7 @@ function markChecked() {
   }
 }
 
-async function fetchLatestRelease({ force = false } = {}) {
+async function fetchLatestRelease() {
   lastCheckError = "";
   const errors = [];
 
@@ -210,7 +204,6 @@ async function getJson(url) {
     try {
       return await getJsonNative(url);
     } catch (error) {
-      // fall through to fetch
       console.warn("CapacitorHttp failed, fallback fetch:", error);
     }
   }
@@ -229,7 +222,12 @@ async function getJson(url) {
 }
 
 async function getJsonNative(url) {
-  const response = await CapacitorHttp.get({
+  const Http = window.Capacitor?.Plugins?.CapacitorHttp;
+  if (!Http?.get) {
+    throw new Error("CapacitorHttp unavailable");
+  }
+
+  const response = await Http.get({
     url,
     headers: {
       Accept: "application/json",
