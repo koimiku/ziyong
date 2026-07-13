@@ -13,6 +13,7 @@ const FILES = [
   "app.js",
   "manifest.webmanifest",
   "sw.js",
+  "update.json",
 ];
 
 const DIRS = ["client", "icons"];
@@ -29,6 +30,21 @@ function copyDir(src, dest) {
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
+
+writeFileSync(
+  join(ROOT, "update.json"),
+  `${JSON.stringify(
+    {
+      version: APP_VERSION,
+      name: `v${APP_VERSION}`,
+      notes: `anime Android ${APP_VERSION}`,
+      htmlUrl: `https://github.com/koimiku/ziyong/releases/tag/v${APP_VERSION}`,
+      apkUrl: `https://github.com/koimiku/ziyong/releases/tag/v${APP_VERSION}`,
+    },
+    null,
+    2
+  )}\n`
+);
 
 for (const file of FILES) {
   const from = join(ROOT, file);

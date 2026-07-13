@@ -14,6 +14,7 @@ export function initializeAppUpdate() {
   const updateButton = document.querySelector("#appUpdateConfirm");
   const dismissButton = document.querySelector("#appUpdateDismiss");
   const checkButton = document.querySelector("#settingsCheckUpdate");
+  const openReleases = document.querySelector("#settingsOpenReleases");
   if (!backdrop || !dialog) return;
 
   updateButton?.addEventListener("click", () => {
@@ -33,17 +34,19 @@ export function initializeAppUpdate() {
   });
 
   backdrop.addEventListener("click", () => closeUpdateDialog());
+  openReleases?.addEventListener("click", (event) => {
+    event.preventDefault();
+    openExternal(GITHUB_RELEASES_URL);
+  });
 
   checkButton?.addEventListener("click", async () => {
     checkButton.disabled = true;
     checkButton.textContent = "检查中…";
     try {
-      const release = await fetchLatestRelease({ force: true });
+      const release = await fetchLatestRelease();
       if (!release) {
         setUpdateStatus(
-          lastCheckError
-            ? `检查失败：${lastCheckError}。可到 GitHub Releases 手动下载。`
-            : "暂时无法检查更新，请检查网络后重试，或到 GitHub Releases 手动下载。"
+          `${friendlyCheckError(lastCheckError)} 当前 v${APP_VERSION}，可点「打开 Releases」手动查看。`
         );
         return;
       }
@@ -76,7 +79,7 @@ export async function checkForAppUpdate({ force = false } = {}) {
   if (!isAndroidStandalone()) return null;
   if (!force && !shouldCheckNow()) return null;
 
-  const release = await fetchLatestRelease({ force });
+  const release = await fetchLatestRelease();
   markChecked();
   if (!release || !isNewerVersion(release.version, APP_VERSION)) return null;
 
@@ -106,8 +109,10 @@ async function fetchLatestRelease() {
   const errors = [];
 
   const attempts = [
+    () => fetchUpdateManifest(),
     () => fetchGithubLatestRelease(),
     () => fetchGithubReleasesList(),
+    () => fetchGithubLatestTag(),
     () => fetchPackageJsonRelease(),
   ];
 
@@ -129,6 +134,37 @@ async function fetchLatestRelease() {
   return null;
 }
 
+async function fetchUpdateManifest() {
+  const urls = [
+    `https://cdn.jsdelivr.net/gh/${GITHUB_REPO}@main/update.json`,
+    `https://raw.githubusercontent.com/${GITHUB_REPO}/main/update.json`,
+    `https://fastly.jsdelivr.net/gh/${GITHUB_REPO}@main/update.json`,
+  ];
+
+  let data = null;
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      data = await getJson(url);
+      if (data?.version) break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!data?.version) {
+    throw lastError || new Error("无法读取 update.json");
+  }
+
+  const version = normalizeVersion(data.version);
+  return {
+    version,
+    name: data.name || `v${version}`,
+    notes: String(data.notes || "").trim(),
+    htmlUrl: data.htmlUrl || `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: data.apkUrl || `${GITHUB_RELEASES_URL}/tag/v${version}`,
+  };
+}
+
 async function fetchGithubLatestRelease() {
   const data = await getJson(
     `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
@@ -145,6 +181,24 @@ async function fetchGithubReleasesList() {
   }
   const release = list.find((item) => !item.draft && !item.prerelease) || list[0];
   return parseGithubRelease(release);
+}
+
+async function fetchGithubLatestTag() {
+  const list = await getJson(
+    `https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=5`
+  );
+  if (!Array.isArray(list) || !list.length) {
+    throw new Error("Tag 列表为空");
+  }
+  const version = normalizeVersion(list[0]?.name || "");
+  if (!version) throw new Error("Tag 无版本号");
+  return {
+    version,
+    name: `v${version}`,
+    notes: "检测到新标签版本。",
+    htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
+  };
 }
 
 async function fetchPackageJsonRelease() {
@@ -173,13 +227,16 @@ async function fetchPackageJsonRelease() {
     name: `v${version}`,
     notes: "检测到仓库版本更新，请下载最新 APK 安装。",
     htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
-    apkUrl: `https://github.com/${GITHUB_REPO}/releases/download/v${version}/app-debug.apk`,
+    apkUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
   };
 }
 
 function parseGithubRelease(data) {
   if (!data || typeof data !== "object") {
     throw new Error("Release 数据无效");
+  }
+  if (data.message && /not found/i.test(data.message)) {
+    throw new Error("HTTP 404");
   }
   const version = normalizeVersion(data.tag_name || data.name || "");
   if (!version) throw new Error("Release 无版本号");
@@ -195,8 +252,19 @@ function parseGithubRelease(data) {
     htmlUrl: data.html_url || `${GITHUB_RELEASES_URL}/tag/v${version}`,
     apkUrl:
       apkAsset?.browser_download_url ||
-      `https://github.com/${GITHUB_REPO}/releases/download/v${version}/app-debug.apk`,
+      `${GITHUB_RELEASES_URL}/tag/v${version}`,
   };
+}
+
+function friendlyCheckError(raw) {
+  const text = String(raw || "");
+  if (/404|not found/i.test(text)) {
+    return "无法访问 GitHub（仓库可能是 Private，或网络拦截）。";
+  }
+  if (/timeout|超时|network|failed to fetch/i.test(text)) {
+    return "网络异常，暂时连不上更新源。";
+  }
+  return text ? `检查失败：${text}。` : "暂时无法检查更新。";
 }
 
 async function getJson(url) {
@@ -250,6 +318,9 @@ async function getJsonNative(url) {
       throw new Error("返回内容不是 JSON");
     }
   }
+  if (data?.message && /not found/i.test(data.message)) {
+    throw new Error("HTTP 404");
+  }
   return data;
 }
 
@@ -286,11 +357,22 @@ function closeUpdateDialog() {
 }
 
 function openDownload(release) {
-  const url = release?.apkUrl || release?.htmlUrl || GITHUB_RELEASES_URL;
+  openExternal(release?.apkUrl || release?.htmlUrl || GITHUB_RELEASES_URL);
+}
+
+function openExternal(url) {
+  const target = url || GITHUB_RELEASES_URL;
+  const Browser = window.Capacitor?.Plugins?.Browser;
+  if (Browser?.open) {
+    Browser.open({ url: target }).catch(() => {
+      window.open(target, "_blank", "noopener,noreferrer");
+    });
+    return;
+  }
   try {
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(target, "_blank", "noopener,noreferrer");
   } catch {
-    window.location.href = url;
+    window.location.href = target;
   }
 }
 
