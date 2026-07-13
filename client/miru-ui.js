@@ -1,6 +1,7 @@
 import {
   fetchMiruInstalled,
   fetchMiruRepo,
+  fetchSourceHealth,
   fetchSourcesHealth,
   installMiruExtension,
   refreshWatchSources,
@@ -320,6 +321,11 @@ async function runHealthChecks(listEl, force = false) {
   );
   if (!rows.length) return;
 
+  const statusEl = document.querySelector("#miruStatus");
+  if (statusEl && force) {
+    statusEl.textContent = "正在检测片源可用性...";
+  }
+
   rows.forEach((row) => {
     const badge = row.querySelector(".health-badge");
     if (!badge) return;
@@ -330,8 +336,30 @@ async function runHealthChecks(listEl, force = false) {
   });
 
   try {
-    const payload = await fetchSourcesHealth();
-    const healthMap = new Map((payload.list || []).map((entry) => [entry.source, entry]));
+    let payload = await fetchSourcesHealth().catch(() => ({ list: [] }));
+    let list = Array.isArray(payload.list) ? payload.list : [];
+
+    // Fallback: probe each visible source individually when batch is empty.
+    if (!list.length) {
+      list = await Promise.all(
+        rows.map(async (row) => {
+          const sourceId = row.dataset.healthTarget;
+          try {
+            return await fetchSourceHealth(sourceId);
+          } catch (error) {
+            return {
+              source: sourceId,
+              ok: false,
+              latency: 0,
+              error: error?.message || "检测失败",
+            };
+          }
+        })
+      );
+    }
+
+    const healthMap = new Map(list.map((entry) => [entry.source, entry]));
+    let okCount = 0;
 
     rows.forEach((row) => {
       const badge = row.querySelector(".health-badge");
@@ -343,6 +371,7 @@ async function runHealthChecks(listEl, force = false) {
         badge.textContent = "未测";
         return;
       }
+      if (result.ok) okCount += 1;
       badge.dataset.healthState = result.ok ? "ok" : "fail";
       badge.className = `health-badge ${result.ok ? "is-ok" : "is-fail"}`;
       badge.textContent = result.ok
@@ -350,6 +379,10 @@ async function runHealthChecks(listEl, force = false) {
         : result.error?.slice(0, 18) || "不可用";
       badge.title = result.error || "";
     });
+
+    if (statusEl && force) {
+      statusEl.textContent = `可用性检测完成：${okCount}/${rows.length} 可用`;
+    }
   } catch (error) {
     rows.forEach((row) => {
       const badge = row.querySelector(".health-badge");
@@ -359,6 +392,9 @@ async function runHealthChecks(listEl, force = false) {
       badge.textContent = "检测失败";
       badge.title = error.message || "";
     });
+    if (statusEl && force) {
+      statusEl.textContent = error.message || "可用性检测失败";
+    }
   }
 }
 

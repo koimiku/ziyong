@@ -18,12 +18,15 @@ import {
   fetchRepoIndex,
   getInstalledSources,
   getMeta,
+  getRuntime,
   installExtension,
   listInstalledMeta,
   uninstallExtension,
 } from "./miru/repo.js";
 
 const BANGUMI_CALENDAR = "https://api.bgm.tv/calendar";
+const HEALTH_QUERY = "海贼王";
+const HEALTH_TIMEOUT_MS = 8000;
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -204,6 +207,105 @@ async function handleMiruUninstall(url) {
   return jsonResponse({ ok: true, sources: getInstalledSources() });
 }
 
+async function withTimeout(promise, ms) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("检测超时")), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function probeSourceHealth(sourceId) {
+  return withTimeout(
+    (async () => {
+      const miruPackage = parseMiruSourceId(sourceId);
+      if (miruPackage) {
+        await ensureMiruReady();
+        if (!getRuntime(miruPackage)) {
+          throw new Error("扩展未加载");
+        }
+        const list = await searchMiru(miruPackage, HEALTH_QUERY);
+        return Array.isArray(list) && list.length > 0;
+      }
+
+      const source = watchSources[sourceId];
+      if (!source) throw new Error("未知片源");
+
+      const list =
+        source.type === "tokuzilla"
+          ? await searchTokuzilla("kamen rider")
+          : await searchMaccms(sourceId, HEALTH_QUERY);
+
+      return Array.isArray(list) && list.length > 0;
+    })(),
+    HEALTH_TIMEOUT_MS
+  );
+}
+
+async function handleSourceHealth(url) {
+  const sourceId = String(url.searchParams.get("source") || "").trim();
+  if (!sourceId) return jsonResponse({ error: "Missing source" }, 400);
+
+  const started = Date.now();
+  try {
+    const ok = await probeSourceHealth(sourceId);
+    return jsonResponse({
+      source: sourceId,
+      ok,
+      latency: Date.now() - started,
+    });
+  } catch (error) {
+    return jsonResponse({
+      source: sourceId,
+      ok: false,
+      latency: Date.now() - started,
+      error: String(error?.message || error),
+    });
+  }
+}
+
+async function handleSourcesHealth() {
+  await ensureMiruReady().catch(() => {});
+
+  const builtin = Object.entries(watchSources)
+    .filter(([, source]) => source.kind === "online")
+    .map(([id]) => id);
+
+  const installedMiru = listInstalledMeta()
+    .filter((meta) => meta.type === "bangumi")
+    .map((meta) => `miru:${meta.package}`);
+
+  const sourceIds = [...builtin, ...installedMiru];
+  const results = await Promise.all(
+    sourceIds.map(async (sourceId) => {
+      const started = Date.now();
+      try {
+        const ok = await probeSourceHealth(sourceId);
+        return {
+          source: sourceId,
+          ok,
+          latency: Date.now() - started,
+        };
+      } catch (error) {
+        return {
+          source: sourceId,
+          ok: false,
+          latency: Date.now() - started,
+          error: String(error?.message || error),
+        };
+      }
+    })
+  );
+
+  return jsonResponse({ list: results, ok: true });
+}
+
 export async function handleNativeApi(input, init = {}) {
   const request = input instanceof Request ? input : new Request(input, init);
   const url = new URL(request.url, window.location.href);
@@ -234,9 +336,8 @@ export async function handleNativeApi(input, init = {}) {
     if (path === "/api/miru/install") return handleMiruInstall(url);
     if (path === "/api/miru/uninstall") return handleMiruUninstall(url);
 
-    if (path === "/api/sources-health" || path === "/api/source-health") {
-      return jsonResponse({ list: [], ok: true });
-    }
+    if (path === "/api/sources-health") return handleSourcesHealth();
+    if (path === "/api/source-health") return handleSourceHealth(url);
     if (path === "/api/server-qr") {
       return jsonResponse({ error: "安卓独立版无需局域网二维码" }, 404);
     }
