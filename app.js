@@ -26,10 +26,14 @@ import { initializeTheme, setThemeMode } from "./client/theme.js";
 import { initializeWindowChrome } from "./client/window-chrome.js";
 import { initializeWatchHistory } from "./client/watch-history.js";
 import { installNativeApi, isAndroidStandalone } from "./client/native/install.js";
+import { initializeAndroidBackButton } from "./client/native/back-button.js";
+import { ensureMiruReady } from "./client/native/miru/repo.js";
 
 installNativeApi();
 if (isAndroidStandalone()) {
   document.documentElement.classList.add("is-android-app");
+  initializeAndroidBackButton();
+  void ensureMiruReady().catch((error) => console.warn("[miru] ready failed", error));
 }
 
 initializeWindowChrome();

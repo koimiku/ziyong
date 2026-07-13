@@ -7,6 +7,21 @@ import {
 } from "./tokuzilla.js";
 import { watchSources } from "./shared.js";
 import { APP_VERSION } from "../version.js";
+import { DEFAULT_MIRU_REPO, parseMiruSourceId } from "./miru/config.js";
+import {
+  detailMiru,
+  resolveMiruPlay,
+  searchMiru,
+} from "./miru/adapter.js";
+import {
+  ensureMiruReady,
+  fetchRepoIndex,
+  getInstalledSources,
+  getMeta,
+  installExtension,
+  listInstalledMeta,
+  uninstallExtension,
+} from "./miru/repo.js";
 
 const BANGUMI_CALENDAR = "https://api.bgm.tv/calendar";
 
@@ -40,6 +55,14 @@ async function handleSourceSearch(url) {
   const query = String(url.searchParams.get("q") || "").trim();
   if (!sourceId || !query) return jsonResponse({ error: "Missing source or query" }, 400);
 
+  const miruPackage = parseMiruSourceId(sourceId);
+  if (miruPackage) {
+    await ensureMiruReady();
+    if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
+    const list = await searchMiru(miruPackage, query);
+    return jsonResponse({ source: sourceId, name: getMeta(miruPackage)?.name, list });
+  }
+
   const source = watchSources[sourceId];
   if (!source) return jsonResponse({ error: "Unknown source" }, 404);
 
@@ -56,6 +79,13 @@ async function handleSourceDetail(url) {
   const id = String(url.searchParams.get("id") || "").trim();
   if (!sourceId || !id) return jsonResponse({ error: "Missing source or id" }, 400);
 
+  const miruPackage = parseMiruSourceId(sourceId);
+  if (miruPackage) {
+    await ensureMiruReady();
+    if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
+    return jsonResponse(await detailMiru(miruPackage, id));
+  }
+
   const source = watchSources[sourceId];
   if (!source) return jsonResponse({ error: "Unknown source" }, 404);
 
@@ -70,8 +100,24 @@ async function handleSourceDetail(url) {
 async function handleSourcePlay(url) {
   const sourceId = url.searchParams.get("source") || "";
   const id = String(url.searchParams.get("id") || "").trim();
+  const watch = String(url.searchParams.get("watch") || "");
+  const page = String(url.searchParams.get("page") || "");
   const sid = Number(url.searchParams.get("sid") || 1);
   const nid = Number(url.searchParams.get("nid") || url.searchParams.get("ep") || 1);
+
+  const miruPackage = parseMiruSourceId(sourceId);
+  if (miruPackage) {
+    if (!watch) return jsonResponse({ error: "Missing watch url" }, 400);
+    await ensureMiruReady();
+    if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
+    try {
+      const stream = await resolveMiruPlay(miruPackage, watch, page);
+      return jsonResponse(stream);
+    } catch (error) {
+      return jsonResponse({ error: String(error?.message || error) }, 502);
+    }
+  }
+
   if (!sourceId || !id) return jsonResponse({ error: "Missing source or id" }, 400);
 
   const source = watchSources[sourceId];
@@ -113,6 +159,51 @@ async function handleWatchHistory(request) {
   }
 }
 
+async function handleMiruRepo(url) {
+  await ensureMiruReady();
+  const repoUrl = String(url.searchParams.get("repo") || DEFAULT_MIRU_REPO);
+  const index = await fetchRepoIndex(repoUrl);
+  const installed = new Set(listInstalledMeta().map((item) => item.package));
+  const list = index
+    .filter((item) => item.type === "bangumi")
+    .filter((item) => String(item.nsfw || "false").toLowerCase() !== "true")
+    .map((item) => ({
+      ...item,
+      installed: installed.has(item.package),
+    }));
+  return jsonResponse({ repo: repoUrl, list });
+}
+
+async function handleMiruInstalled() {
+  await ensureMiruReady();
+  return jsonResponse({
+    list: listInstalledMeta(),
+    sources: getInstalledSources(),
+  });
+}
+
+async function handleMiruSources() {
+  await ensureMiruReady();
+  return jsonResponse({ list: getInstalledSources() });
+}
+
+async function handleMiruInstall(url) {
+  const packageName = String(url.searchParams.get("package") || "").trim();
+  const repoUrl = String(url.searchParams.get("repo") || DEFAULT_MIRU_REPO);
+  if (!packageName) return jsonResponse({ error: "Missing package" }, 400);
+  await ensureMiruReady();
+  const meta = await installExtension(packageName, repoUrl);
+  return jsonResponse({ ok: true, meta, sources: getInstalledSources() });
+}
+
+async function handleMiruUninstall(url) {
+  const packageName = String(url.searchParams.get("package") || "").trim();
+  if (!packageName) return jsonResponse({ error: "Missing package" }, 400);
+  await ensureMiruReady();
+  uninstallExtension(packageName);
+  return jsonResponse({ ok: true, sources: getInstalledSources() });
+}
+
 export async function handleNativeApi(input, init = {}) {
   const request = input instanceof Request ? input : new Request(input, init);
   const url = new URL(request.url, window.location.href);
@@ -124,7 +215,7 @@ export async function handleNativeApi(input, init = {}) {
         version: `${APP_VERSION}-android`,
         mode: "android-standalone",
         urls: [],
-        mobileHint: "安卓独立版：不依赖电脑，内置片源在手机本地解析。",
+        mobileHint: "安卓独立版：不依赖电脑，内置片源与 Miru 扩展可在手机本地使用。",
       });
     }
 
@@ -137,15 +228,12 @@ export async function handleNativeApi(input, init = {}) {
     if (path === "/api/source-play") return handleSourcePlay(url);
     if (path === "/api/watch-history") return handleWatchHistory(request);
 
-    if (path === "/api/miru/sources" || path === "/api/miru/repo" || path === "/api/miru/installed") {
-      return jsonResponse({
-        list: [],
-        message: "安卓独立版暂不支持 Miru 扩展，可使用内置片源与 Tokuzilla。",
-      });
-    }
-    if (path === "/api/miru/install" || path === "/api/miru/uninstall") {
-      return jsonResponse({ error: "安卓独立版暂不支持安装 Miru 扩展" }, 400);
-    }
+    if (path === "/api/miru/repo") return handleMiruRepo(url);
+    if (path === "/api/miru/installed") return handleMiruInstalled();
+    if (path === "/api/miru/sources") return handleMiruSources();
+    if (path === "/api/miru/install") return handleMiruInstall(url);
+    if (path === "/api/miru/uninstall") return handleMiruUninstall(url);
+
     if (path === "/api/sources-health" || path === "/api/source-health") {
       return jsonResponse({ list: [], ok: true });
     }
@@ -158,7 +246,7 @@ export async function handleNativeApi(input, init = {}) {
       return Response.redirect(target, 302);
     }
 
-    return jsonResponse({ error: `未实现接口: ${path}` }, 404);
+    return jsonResponse({ error: `Unsupported native API: ${path}` }, 404);
   } catch (error) {
     return jsonResponse({ error: String(error?.message || error) }, 502);
   }
