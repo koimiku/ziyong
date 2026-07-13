@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
-  "description": "anime - 番剧搜索与多源播�?,
+  "description": "anime - 番剧搜索与多源播放",
   "author": "Anime",
   "scripts": {
     "start": "node server.mjs",
