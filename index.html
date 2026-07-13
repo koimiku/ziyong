@@ -401,12 +401,22 @@
     </template>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
-    <script type="module" src="./app.js"></script>
+    <script type="module">
+      import("./app.js").catch((error) => {
+        const box = document.createElement("div");
+        box.style.cssText =
+          "position:fixed;inset:12px;z-index:99999;overflow:auto;padding:16px;border-radius:12px;background:#111;color:#fee;font:12px/1.5 monospace;white-space:pre-wrap;";
+        box.textContent = `脚本加载失败：\n\n${error?.stack || error?.message || error}`;
+        document.body.appendChild(box);
+      });
+    </script>
     <script>
       (async () => {
         if (!("serviceWorker" in navigator)) return;
 
+        const isNativeApp = Boolean(window.Capacitor?.isNativePlatform?.());
         const isDesktopApp =
+          isNativeApp ||
           navigator.userAgent.includes("Electron") ||
           window.location.hostname === "127.0.0.1" ||
           window.location.hostname === "localhost";

@@ -1,8 +1,6 @@
-import { initializeAppUpdate } from "./client/app-update.js";
 import { fallbackAnime } from "./client/config.js";
 import { decorateAnime } from "./client/bangumi.js";
 import {
-  pageTitle,
   sortSelect,
   themeSelect,
   typeTabs,
@@ -12,7 +10,6 @@ import { bindExploreNavigation } from "./client/explore-nav.js";
 import { initializeContentMode, isTokusatsuMode } from "./client/content-mode.js";
 import { initializeDesktopNav } from "./client/desktop-nav.js";
 import { initializeMediaRows } from "./client/media-rows.js";
-import { initializeLanShare } from "./client/lan-share.js";
 import { initializeMobile } from "./client/mobile.js";
 import { initializeMobileInstall } from "./client/mobile-install.js";
 import { initializeMiruPanel } from "./client/miru-ui.js";
@@ -26,104 +23,141 @@ import { initializeTheme, setThemeMode } from "./client/theme.js";
 import { initializeWindowChrome } from "./client/window-chrome.js";
 import { initializeWatchHistory } from "./client/watch-history.js";
 import { installNativeApi, isAndroidStandalone } from "./client/native/install.js";
-import { initializeAndroidBackButton } from "./client/native/back-button.js";
-import { ensureMiruReady } from "./client/native/miru/repo.js";
 
-installNativeApi();
-if (isAndroidStandalone()) {
-  document.documentElement.classList.add("is-android-app");
-  initializeAndroidBackButton();
-  void ensureMiruReady().catch((error) => console.warn("[miru] ready failed", error));
-}
-
-initializeWindowChrome();
-initializeContentMode();
-initializeWatchHistory()
-  .then(() => {
-    if (!state.query) renderResults();
-  })
-  .catch((error) => console.warn(error));
-
-document.addEventListener("anime:history-changed", () => {
-  if (!state.query && !document.body.classList.contains("is-browsing-hero")) {
-    renderResults();
+function showBootError(error) {
+  const message = String(error?.stack || error?.message || error);
+  console.error("[boot]", error);
+  let box = document.querySelector("#bootError");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "bootError";
+    box.style.cssText =
+      "position:fixed;inset:12px;z-index:99999;overflow:auto;padding:16px;border-radius:12px;background:#111;color:#fee;font:12px/1.5 monospace;white-space:pre-wrap;";
+    document.body.appendChild(box);
   }
-});
-
-if (!isTokusatsuMode()) {
-  state.exploreItems = fallbackAnime.map((item) => decorateAnime(item, ""));
-} else {
-  state.exploreItems = [];
+  box.textContent = `启动失败，请反馈此信息：\n\n${message}`;
 }
 
-typeTabs.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-type]");
-  if (!button) return;
-  state.type = button.dataset.type;
-  typeTabs.querySelectorAll("button").forEach((tab) => {
-    tab.classList.toggle("active", tab === button);
+try {
+  installNativeApi();
+  if (isAndroidStandalone()) {
+    document.documentElement.classList.add("is-android-app");
+  }
+
+  initializeWindowChrome();
+  initializeContentMode();
+  initializeWatchHistory()
+    .then(() => {
+      if (!state.query) renderResults();
+    })
+    .catch((error) => console.warn(error));
+
+  document.addEventListener("anime:history-changed", () => {
+    if (!state.query && !document.body.classList.contains("is-browsing-hero")) {
+      renderResults();
+    }
+  });
+
+  if (!isTokusatsuMode()) {
+    state.exploreItems = fallbackAnime.map((item) => decorateAnime(item, ""));
+  } else {
+    state.exploreItems = [];
+  }
+
+  typeTabs?.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-type]");
+    if (!button) return;
+    state.type = button.dataset.type;
+    typeTabs.querySelectorAll("button").forEach((tab) => {
+      tab.classList.toggle("active", tab === button);
+    });
+    renderResults();
+  });
+
+  yearFilterSelect?.addEventListener("change", () => {
+    state.yearFilter = yearFilterSelect.value;
+    renderResults();
+  });
+
+  sortSelect?.addEventListener("change", () => {
+    state.sort = sortSelect.value;
+    renderResults();
+  });
+
+  themeSelect?.addEventListener("change", () => {
+    setThemeMode(themeSelect.value);
+  });
+
+  initializeTheme();
+  initializeSearchDialog();
+  initializeMediaRows();
+  document.addEventListener("anime:watch-ended", () => {
+    if (!state.query) renderResults();
   });
   renderResults();
-});
+  initializeMobile();
+  initializeMobileInstall();
+  initializeDesktopNav();
+  bindExploreNavigation();
+  showAppVersion();
 
-yearFilterSelect?.addEventListener("change", () => {
-  state.yearFilter = yearFilterSelect.value;
-  renderResults();
-});
+  if (!isAndroidStandalone()) {
+    import("./client/lan-share.js")
+      .then(({ initializeLanShare }) => initializeLanShare())
+      .catch((error) => console.warn(error));
+  }
 
-sortSelect.addEventListener("change", () => {
-  state.sort = sortSelect.value;
-  renderResults();
-});
+  if (isTokusatsuMode()) {
+    loadTokusatsuFeed();
+  } else {
+    loadExploreFeed();
+    loadCalendarFeed().then(() => {
+      if (!state.query && !state.browseMode) renderResults();
+    });
+  }
 
-themeSelect.addEventListener("change", () => {
-  setThemeMode(themeSelect.value);
-});
+  refreshWatchSources()
+    .then(() => initializeMiruPanel())
+    .catch((error) => console.warn(error));
 
-initializeTheme();
-initializeSearchDialog();
-initializeMediaRows();
-document.addEventListener("anime:watch-ended", () => {
-  if (!state.query) renderResults();
-});
-renderResults();
-initializeMobile();
-initializeMobileInstall();
-initializeAppUpdate();
-initializeDesktopNav();
-bindExploreNavigation();
-showAppVersion();
-if (!isAndroidStandalone()) {
-  initializeLanShare();
+  // Native-only features: load after UI so failures cannot blank the app.
+  if (isAndroidStandalone()) {
+    import("./client/native/back-button.js")
+      .then(({ initializeAndroidBackButton }) => initializeAndroidBackButton())
+      .catch((error) => console.warn("[back]", error));
+    import("./client/native/miru/repo.js")
+      .then(({ ensureMiruReady }) => ensureMiruReady())
+      .catch((error) => console.warn("[miru]", error));
+  }
+
+  import("./client/app-update.js")
+    .then(({ initializeAppUpdate }) => initializeAppUpdate())
+    .catch((error) => console.warn("[update]", error));
+} catch (error) {
+  showBootError(error);
 }
-if (isTokusatsuMode()) {
-  loadTokusatsuFeed();
-} else {
-  loadExploreFeed();
-  loadCalendarFeed().then(() => {
-    if (!state.query && !state.browseMode) renderResults();
-  });
-}
-
-refreshWatchSources()
-  .then(() => initializeMiruPanel())
-  .catch((error) => console.warn(error));
 
 async function showAppVersion() {
   const el = document.querySelector("#appVersion");
   if (!el) return;
 
-  const result = await fetchServerInfo();
-  if (result.ok && result.data?.version) {
-    hideServiceWarning();
-    el.textContent = `v${result.data.version}`;
-    el.hidden = false;
-    return;
-  }
+  try {
+    const result = await fetchServerInfo();
+    if (result.ok && result.data?.version) {
+      hideServiceWarning();
+      el.textContent = `v${result.data.version}`;
+      el.hidden = false;
+      return;
+    }
 
-  el.textContent = `v${APP_VERSION}`;
-  el.hidden = false;
-  if (result.stale) {
-    showServiceWarning(result.message);
+    el.textContent = `v${APP_VERSION}`;
+    el.hidden = false;
+    if (result.stale) {
+      showServiceWarning(result.message);
+    }
+  } catch (error) {
+    el.textContent = `v${APP_VERSION}`;
+    el.hidden = false;
+    console.warn(error);
   }
 }

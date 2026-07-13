@@ -1,5 +1,3 @@
-import { handleNativeApi } from "./router.js";
-
 export function isAndroidStandalone() {
   try {
     return Boolean(window.Capacitor?.isNativePlatform?.());
@@ -41,6 +39,7 @@ export function installNativeApi() {
         window.location.href
       );
       if (url.origin === window.location.origin && url.pathname.startsWith("/api/")) {
+        const { handleNativeApi } = await import("./router.js");
         return handleNativeApi(input, init);
       }
     } catch {

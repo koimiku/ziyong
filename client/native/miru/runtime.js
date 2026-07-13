@@ -23,9 +23,11 @@ function createExtensionClass(meta) {
   const XPathNode = createXPathClass();
 
   return class Extension {
-    package = meta.package;
-    name = meta.name;
-    settingKeys = [];
+    constructor() {
+      this.package = meta.package;
+      this.name = meta.name;
+      this.settingKeys = [];
+    }
 
     querySelector(content, selector) {
       return new Element(content, selector);
