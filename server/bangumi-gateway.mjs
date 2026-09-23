@@ -1,7 +1,7 @@
 import { writeJson } from "./utils.mjs";
 
 const BANGUMI_ORIGIN = "https://api.bgm.tv";
-const DEFAULT_UA = "ziyong/1.4.1 (https://github.com/koimiku/ziyong)";
+const DEFAULT_UA = "ziyong/1.4.2 (https://github.com/koimiku/ziyong)";
 
 function appUserAgent(request) {
   const forwarded = String(request.headers["x-bangumi-user-agent"] || "").trim();
