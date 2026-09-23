@@ -1,8 +1,13 @@
 import { writeJson } from "./utils.mjs";
-import { browserHeaders } from "./config.mjs";
 
 const BANGUMI_ORIGIN = "https://api.bgm.tv";
 const DEFAULT_UA = "ziyong/1.4.1 (https://github.com/koimiku/ziyong)";
+
+function appUserAgent(request) {
+  const forwarded = String(request.headers["x-bangumi-user-agent"] || "").trim();
+  if (forwarded && !/mozilla/i.test(forwarded)) return forwarded.slice(0, 200);
+  return DEFAULT_UA;
+}
 
 function readBody(request) {
   return new Promise((resolve, reject) => {
@@ -24,7 +29,7 @@ export async function handleBangumiGateway(request, response, url) {
   const method = String(request.method || "GET").toUpperCase();
   const headers = {
     Accept: "application/json",
-    "User-Agent": request.headers["user-agent"] || DEFAULT_UA,
+    "User-Agent": appUserAgent(request),
   };
   if (request.headers.authorization) {
     headers.Authorization = request.headers.authorization;
@@ -42,10 +47,7 @@ export async function handleBangumiGateway(request, response, url) {
   try {
     const upstream = await fetch(target, {
       method,
-      headers: {
-        ...browserHeaders,
-        ...headers,
-      },
+      headers,
       body,
     });
     const text = await upstream.text();

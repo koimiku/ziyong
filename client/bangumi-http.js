@@ -8,6 +8,7 @@ function buildHeaders(extra = {}, token = "") {
   const headers = {
     Accept: "application/json",
     "User-Agent": BANGUMI_USER_AGENT,
+    "X-Bangumi-User-Agent": BANGUMI_USER_AGENT,
     ...extra,
   };
   if (token) headers.Authorization = `Bearer ${token}`;

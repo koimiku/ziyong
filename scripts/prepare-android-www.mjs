@@ -39,7 +39,7 @@ writeFileSync(
       name: `v${APP_VERSION}`,
       notes: `anime Android ${APP_VERSION}`,
       htmlUrl: `https://github.com/koimiku/ziyong/releases/tag/v${APP_VERSION}`,
-      apkUrl: `https://github.com/koimiku/ziyong/releases/tag/v${APP_VERSION}`,
+      apkUrl: `https://github.com/koimiku/ziyong/releases/download/v${APP_VERSION}/app-release.apk`,
     },
     null,
     2

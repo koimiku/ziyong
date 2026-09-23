@@ -18,8 +18,7 @@ export function initializeAppUpdate() {
   if (!backdrop || !dialog) return;
 
   updateButton?.addEventListener("click", () => {
-    openDownload(latestRelease);
-    closeUpdateDialog();
+    void installRelease(latestRelease);
   });
 
   dismissButton?.addEventListener("click", () => {
@@ -161,7 +160,7 @@ async function fetchUpdateManifest() {
     name: data.name || `v${version}`,
     notes: String(data.notes || "").trim(),
     htmlUrl: data.htmlUrl || `${GITHUB_RELEASES_URL}/tag/v${version}`,
-    apkUrl: data.apkUrl || `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: directApkUrl(data.apkUrl, version),
   };
 }
 
@@ -197,7 +196,7 @@ async function fetchGithubLatestTag() {
     name: `v${version}`,
     notes: "检测到新标签版本。",
     htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
-    apkUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: directApkUrl("", version),
   };
 }
 
@@ -227,7 +226,7 @@ async function fetchPackageJsonRelease() {
     name: `v${version}`,
     notes: "检测到仓库版本更新，请下载最新 APK 安装。",
     htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
-    apkUrl: `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: directApkUrl("", version),
   };
 }
 
@@ -250,10 +249,17 @@ function parseGithubRelease(data) {
     name: data.name || `v${version}`,
     notes: String(data.body || "").trim(),
     htmlUrl: data.html_url || `${GITHUB_RELEASES_URL}/tag/v${version}`,
-    apkUrl:
-      apkAsset?.browser_download_url ||
-      `${GITHUB_RELEASES_URL}/tag/v${version}`,
+    apkUrl: directApkUrl(apkAsset?.browser_download_url, version),
   };
+}
+
+function directApkUrl(raw, version) {
+  const url = String(raw || "").trim();
+  if (/\.apk(?:$|\?)/i.test(url)) return url;
+  if (version) {
+    return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/app-release.apk`;
+  }
+  return url || GITHUB_RELEASES_URL;
 }
 
 function friendlyCheckError(raw) {
@@ -333,9 +339,14 @@ function showUpdateDialog(release) {
   const notes = document.querySelector("#appUpdateNotes");
   if (!dialog || !backdrop) return;
 
+  const confirm = document.querySelector("#appUpdateConfirm");
+  if (confirm && !installing) {
+    confirm.disabled = false;
+    confirm.textContent = "下载并安装";
+  }
   if (title) title.textContent = `发现新版本 v${release.version}`;
   if (tip) {
-    tip.textContent = `当前 v${APP_VERSION}，可前往 GitHub 下载安装包更新。`;
+    tip.textContent = `当前 v${APP_VERSION}。将在应用内下载安装包，完成后打开系统安装界面。`;
   }
   if (notes) {
     const preview = release.notes
@@ -356,8 +367,50 @@ function closeUpdateDialog() {
   document.body.classList.remove("app-update-open");
 }
 
-function openDownload(release) {
-  openExternal(release?.apkUrl || release?.htmlUrl || GITHUB_RELEASES_URL);
+let installing = false;
+
+async function installRelease(release) {
+  const button = document.querySelector("#appUpdateConfirm");
+  const tip = document.querySelector("#appUpdateTip");
+  const url = directApkUrl(release?.apkUrl, release?.version);
+  const plugin = window.Capacitor?.Plugins?.ApkUpdater;
+  if (!plugin?.downloadAndInstall || !isAndroidStandalone()) {
+    openExternal(url);
+    return;
+  }
+  if (installing) return;
+  installing = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "准备下载…";
+  }
+  if (tip) tip.textContent = "正在下载安装包，完成后会打开系统安装界面。";
+
+  let handle = null;
+  try {
+    handle = await plugin.addListener?.("progress", (event) => {
+      const percent = Number(event?.percent);
+      if (button) {
+        button.textContent = percent >= 0 ? `下载中 ${percent}%` : "下载中…";
+      }
+    });
+    await plugin.downloadAndInstall({ url });
+    if (tip) tip.textContent = "下载完成。请在系统安装界面点「安装」。";
+    if (button) {
+      button.disabled = false;
+      button.textContent = "下载并安装";
+    }
+  } catch (error) {
+    const message = String(error?.message || error || "下载失败");
+    if (tip) tip.textContent = message;
+    if (button) {
+      button.disabled = false;
+      button.textContent = "重试";
+    }
+  } finally {
+    installing = false;
+    handle?.remove?.();
+  }
 }
 
 function openExternal(url) {
