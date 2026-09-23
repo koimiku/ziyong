@@ -46,15 +46,6 @@ export const watchSources = {
       `https://omofun04.top/vod/play/id/${id}/sid/${sid}/nid/${nid}.html`,
     episodePattern: /href="\/vod\/play\/id\/(\d+)\/sid\/(\d+)\/nid\/(\d+)\.html"[^>]*>([\s\S]*?)<\/a>/gi,
   },
-  tokuzilla: {
-    name: "Tokuzilla",
-    type: "tokuzilla",
-    kind: "online",
-    partition: "tokusatsu",
-    origin: "https://tokuzilla.net",
-    detailUrl: (slug) => `https://tokuzilla.net/watch/${slug}.html`,
-    searchUrl: (query) => `https://tokuzilla.net/?s=${encodeURIComponent(query)}`,
-  },
 };
 
 export function decodeHtml(value) {

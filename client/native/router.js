@@ -1,3 +1,4 @@
+import { createHealthMonitor } from "../health-monitor.js";
 import { detailMaccms, playMaccms, searchMaccms } from "./maccms.js";
 import {
   detailTokuzilla,
@@ -248,62 +249,18 @@ async function probeSourceHealth(sourceId) {
   );
 }
 
-async function handleSourceHealth(url) {
-  const sourceId = String(url.searchParams.get("source") || "").trim();
-  if (!sourceId) return jsonResponse({ error: "Missing source" }, 400);
+const healthMonitor = createHealthMonitor(probeSourceHealth);
 
-  const started = Date.now();
-  try {
-    const ok = await probeSourceHealth(sourceId);
-    return jsonResponse({
-      source: sourceId,
-      ok,
-      latency: Date.now() - started,
-    });
-  } catch (error) {
-    return jsonResponse({
-      source: sourceId,
-      ok: false,
-      latency: Date.now() - started,
-      error: String(error?.message || error),
-    });
-  }
+async function handleSourceHealth(url) {
+  const source = String(url.searchParams.get("source") || "").trim();
+  if (!source) return jsonResponse({ error: "Missing source" }, 400);
+  return jsonResponse(await healthMonitor.check(source, { force: url.searchParams.get("force") === "1" }));
 }
 
-async function handleSourcesHealth() {
-  await ensureMiruReady().catch(() => {});
-
-  const builtin = Object.entries(watchSources)
-    .filter(([, source]) => source.kind === "online")
-    .map(([id]) => id);
-
-  const installedMiru = listInstalledMeta()
-    .filter((meta) => meta.type === "bangumi")
-    .map((meta) => `miru:${meta.package}`);
-
-  const sourceIds = [...builtin, ...installedMiru];
-  const results = await Promise.all(
-    sourceIds.map(async (sourceId) => {
-      const started = Date.now();
-      try {
-        const ok = await probeSourceHealth(sourceId);
-        return {
-          source: sourceId,
-          ok,
-          latency: Date.now() - started,
-        };
-      } catch (error) {
-        return {
-          source: sourceId,
-          ok: false,
-          latency: Date.now() - started,
-          error: String(error?.message || error),
-        };
-      }
-    })
-  );
-
-  return jsonResponse({ list: results, ok: true });
+async function handleSourcesHealth(url) {
+  const ids = Object.entries(watchSources).filter(([, source]) => source.kind === "online").map(([id]) => id);
+  ids.push(...listInstalledMeta().filter(meta => meta.type === "bangumi").map(meta => 'miru:' + meta.package));
+  return jsonResponse({ list: await healthMonitor.checkAll(ids, { force: url?.searchParams.get("force") === "1" }) });
 }
 
 export async function handleNativeApi(input, init = {}) {
@@ -323,7 +280,7 @@ export async function handleNativeApi(input, init = {}) {
 
     if (path === "/api/bangumi/calendar") return handleBangumiCalendar();
     if (path === "/api/tokuzilla/latest") {
-      return jsonResponse({ list: await fetchTokuzillaLatest() });
+      return jsonResponse({ error: "特摄分区已移除" }, 410);
     }
     if (path === "/api/source-search") return handleSourceSearch(url);
     if (path === "/api/source-detail") return handleSourceDetail(url);
@@ -336,7 +293,7 @@ export async function handleNativeApi(input, init = {}) {
     if (path === "/api/miru/install") return handleMiruInstall(url);
     if (path === "/api/miru/uninstall") return handleMiruUninstall(url);
 
-    if (path === "/api/sources-health") return handleSourcesHealth();
+    if (path === "/api/sources-health") return handleSourcesHealth(url);
     if (path === "/api/source-health") return handleSourceHealth(url);
     if (path === "/api/server-qr") {
       return jsonResponse({ error: "安卓独立版无需局域网二维码" }, 404);

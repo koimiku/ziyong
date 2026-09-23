@@ -248,8 +248,8 @@ export async function uninstallMiruExtension(packageName) {
   return payload;
 }
 
-export async function fetchSourcesHealth() {
-  const response = await fetch("/api/sources-health", { cache: "no-store" });
+export async function fetchSourcesHealth(force = false) {
+  const response = await fetch(`/api/sources-health?force=${force ? 1 : 0}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.error || `Health check failed: ${response.status}`);
@@ -257,9 +257,9 @@ export async function fetchSourcesHealth() {
   return payload;
 }
 
-export async function fetchSourceHealth(sourceId) {
+export async function fetchSourceHealth(sourceId, force = false) {
   const response = await fetch(
-    `/api/source-health?source=${encodeURIComponent(sourceId)}`,
+    `/api/source-health?source=${encodeURIComponent(sourceId)}&force=${force ? 1 : 0}`,
     { cache: "no-store" }
   );
   const payload = await response.json().catch(() => ({}));

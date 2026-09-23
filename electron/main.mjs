@@ -115,13 +115,13 @@ async function createWindow() {
     mainWindow.show();
   });
 
-  await mainWindow.webContents.session.clearCache();
-  await mainWindow.webContents.session.clearStorageData({
+  // Retire old service workers without discarding reusable HTTP assets.
+  const cleanup = mainWindow.webContents.session.clearStorageData({
     storages: ["serviceworkers", "cachestorage"],
   });
 
   // Show splash immediately, then boot the local server.
-  await mainWindow.loadURL(splashHtml());
+  const splash = mainWindow.loadURL(splashHtml());
 
   serverInfo = await startServer({
     port: APP_PORT,
@@ -134,7 +134,8 @@ async function createWindow() {
   }
 
   if (!mainWindow) return;
-  const appUrl = `${serverInfo.url}?v=${Date.now()}&desktop=1`;
+  await Promise.all([splash, cleanup]);
+  const appUrl = `${serverInfo.url}?v=${app.getVersion()}&desktop=1`;
   mainWindow.setTitle(`anime · ${serverInfo.url}`);
   await mainWindow.loadURL(appUrl);
 

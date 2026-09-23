@@ -16,7 +16,6 @@ import { initializeMiruPanel } from "./client/miru-ui.js";
 import { loadExploreFeed, loadTokusatsuFeed, renderResults } from "./client/results.js";
 import { loadCalendarFeed } from "./client/calendar.js";
 import { initializeSearchDialog } from "./client/search-dialog.js";
-import { refreshWatchSources } from "./client/sources.js";
 import { APP_VERSION, fetchServerInfo, hideServiceWarning, showServiceWarning } from "./client/server-api.js";
 import { state } from "./client/state.js";
 import { initializeTheme, setThemeMode } from "./client/theme.js";
@@ -118,9 +117,10 @@ try {
     });
   }
 
-  refreshWatchSources()
-    .then(() => initializeMiruPanel())
-    .catch((error) => console.warn(error));
+  // Let the first frame paint before background source discovery.
+  setTimeout(() => {
+    initializeMiruPanel().catch(error => console.warn(error));
+  }, 1200);
 
   // Native-only features: load after UI so failures cannot blank the app.
   if (isAndroidStandalone()) {

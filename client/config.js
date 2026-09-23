@@ -41,13 +41,6 @@ export const watchSources = [
     searchUrl: (title) =>
       `https://mikanani.me/Home/Search?searchstr=${encodeURIComponent(title)}`,
   },
-  {
-    id: "tokuzilla",
-    name: "Tokuzilla",
-    kind: "online",
-    partition: "tokusatsu",
-    searchUrl: (title) => `https://tokuzilla.net/?s=${encodeURIComponent(title)}`,
-  },
 ];
 
 export const onlineSources = watchSources.filter((source) => source.kind === "online");

@@ -48,7 +48,7 @@ export function initializeSearchDialog() {
   const mobileInput = document.querySelector("#mobileSearchInput");
   const mobileSuggest = document.querySelector("#mobileSearchSuggest");
   const backdrop = document.querySelector("#searchBackdrop");
-  const closeButton = document.querySelector("#searchClose");
+  const dialog = document.querySelector("#searchDialog");
 
   const triggers = [
     document.querySelector("#headerSearchButton"),
@@ -59,7 +59,9 @@ export function initializeSearchDialog() {
     trigger.addEventListener("click", () => openSearchDialog());
   });
 
-  closeButton?.addEventListener("click", closeSearchDialog);
+  dialog?.addEventListener("click", (event) => {
+    if (event.target === dialog) closeSearchDialog();
+  });
   backdrop?.addEventListener("click", closeSearchDialog);
 
   searchForm?.addEventListener("submit", (event) => {
@@ -107,9 +109,18 @@ export function initializeSearchDialog() {
 function bindInputEvents(input, suggestEl, clearButton) {
   if (!input) return;
 
-  input.addEventListener("input", () => {
-    if (clearButton) syncClearButton();
+  let composing = false;
+  input.addEventListener("compositionstart", () => {
+    composing = true;
+    hideSuggest();
+  });
+  input.addEventListener("compositionend", () => {
+    composing = false;
     scheduleSuggest(input.value.trim());
+  });
+  input.addEventListener("input", (event) => {
+    if (clearButton) syncClearButton();
+    if (!composing && !event.isComposing) scheduleSuggest(input.value.trim());
   });
 
   input.addEventListener("focus", () => {
@@ -131,6 +142,7 @@ function bindInputEvents(input, suggestEl, clearButton) {
   });
 
   input.addEventListener("keydown", (event) => {
+    if (composing || event.isComposing || event.keyCode === 229) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       moveActive(1);
@@ -157,6 +169,7 @@ function bindInputEvents(input, suggestEl, clearButton) {
   });
 
   clearButton?.addEventListener("click", () => {
+    hideSuggest();
     input.value = "";
     syncClearButton();
     input.focus();
@@ -187,7 +200,7 @@ export function openSearchDialog() {
     }
     window.requestAnimationFrame(() => {
       mobileInput?.focus();
-      mobileInput?.select();
+
       const query = mobileInput?.value.trim() || "";
       if (query) scheduleSuggest(query);
       else renderSuggestPanel([], getRecentSearches());
@@ -196,12 +209,12 @@ export function openSearchDialog() {
   }
 
   document.querySelector(".header-search")?.scrollIntoView({
-    behavior: "smooth",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
     block: "center",
   });
   window.requestAnimationFrame(() => {
     searchInput?.focus();
-    searchInput?.select();
+
     const query = searchInput?.value.trim() || "";
     if (query) scheduleSuggest(query);
     else renderSuggestPanel([], getRecentSearches());
@@ -223,6 +236,7 @@ function commitSearch(query) {
   rememberRecent(query);
   hideSuggest();
   if (searchInput) searchInput.value = query;
+  syncClearButton();
   const mobileInput = document.querySelector("#mobileSearchInput");
   if (mobileInput) mobileInput.value = query;
   closeSearchDialog();
@@ -252,6 +266,7 @@ function chooseSuggest(entry) {
 }
 
 function scheduleSuggest(query) {
+  hideSuggest();
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = window.setTimeout(() => {
     loadSuggestions(query).catch((error) => console.warn(error));
@@ -358,6 +373,9 @@ function renderSuggestPanel(items, recent = [], options = {}) {
 }
 
 function hideSuggest() {
+  ++suggestRequestId;
+  clearTimeout(debounceTimer);
+  debounceTimer = null;
   ["#searchSuggest", "#mobileSearchSuggest"].forEach((selector) => {
     const suggestEl = document.querySelector(selector);
     if (!suggestEl) return;
@@ -403,5 +421,5 @@ function rememberRecent(query) {
     0,
     MAX_RECENT
   );
-  localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* Search works when storage is unavailable. */ }
 }

@@ -17,6 +17,16 @@ function setupMediaRow(row) {
 
   track.replaceWith(scroller);
   scroller.append(prev, track, next);
+  track.tabIndex = 0;
+  const scrollPage = (direction) => track.scrollBy({
+    left: direction * track.clientWidth * SCROLL_STEP_RATIO,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+  });
+  track.addEventListener("keydown", (event) => {
+    if (event.target !== track || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    scrollPage(event.key === "ArrowLeft" ? -1 : 1);
+  });
 
   let navFrame = 0;
   const updateNav = () => {
@@ -34,11 +44,11 @@ function setupMediaRow(row) {
   rowNavHandlers.set(track, updateNav);
 
   prev.addEventListener("click", () => {
-    track.scrollBy({ left: -track.clientWidth * SCROLL_STEP_RATIO, behavior: "auto" });
+    scrollPage(-1);
   });
 
   next.addEventListener("click", () => {
-    track.scrollBy({ left: track.clientWidth * SCROLL_STEP_RATIO, behavior: "auto" });
+    scrollPage(1);
   });
 
   track.addEventListener("scroll", updateNav, { passive: true });

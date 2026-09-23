@@ -53,12 +53,14 @@ export function setAppView(view) {
 }
 
 export function syncExplorePanels() {
+  // Background feed/history updates must not reveal the home page over another view.
+  const outsideExplore = appShell?.classList.contains("view-miru") || appShell?.classList.contains("view-settings");
   const searching = document.body.classList.contains("is-searching");
   const browsingHero = document.body.classList.contains("is-browsing-hero");
   const showList = searching || browsingHero;
 
-  document.querySelector("#dashboardView")?.toggleAttribute("hidden", showList);
-  document.querySelector("#resultsView")?.toggleAttribute("hidden", !showList);
+  document.querySelector("#dashboardView")?.toggleAttribute("hidden", outsideExplore || showList);
+  document.querySelector("#resultsView")?.toggleAttribute("hidden", outsideExplore || !showList);
 }
 
 export function setSearchMode(active) {

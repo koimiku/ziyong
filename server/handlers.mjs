@@ -1,3 +1,4 @@
+import { createHealthMonitor } from "../client/health-monitor.js";
 import { browserHeaders, watchSources } from "./config.mjs";
 import { getRuntime, listInstalledMeta } from "./miru/repo.mjs";
 import { getCache, setCache } from "./cache.mjs";
@@ -204,31 +205,15 @@ export async function handleMikanStreamRoute(url, request, response) {
 }
 
 const HEALTH_QUERY = "海贼王";
-const HEALTH_TIMEOUT_MS = 8000;
+const healthMonitor = createHealthMonitor(probeSourceHealth);
 
 export async function handleSourceHealth(url, response) {
   const sourceId = String(url.searchParams.get("source") || "").trim();
-  if (!sourceId) {
-    writeJson(response, 400, { error: "Missing source" });
+  if (!watchSources[sourceId] && !getMeta(parseMiruSourceId(sourceId))) {
+    writeJson(response, 400, { error: "未知片源" });
     return;
   }
-
-  const started = Date.now();
-  try {
-    const ok = await probeSourceHealth(sourceId);
-    writeJson(response, 200, {
-      source: sourceId,
-      ok,
-      latency: Date.now() - started,
-    });
-  } catch (error) {
-    writeJson(response, 200, {
-      source: sourceId,
-      ok: false,
-      latency: Date.now() - started,
-      error: String(error?.message || error),
-    });
-  }
+  writeJson(response, 200, await healthMonitor.check(sourceId, { force: url.searchParams.get("force") === "1" }));
 }
 
 export async function handleTokuzillaLatest(_url, response) {
@@ -250,62 +235,36 @@ export async function handleSourcesHealth(_url, response) {
     .map((meta) => `miru:${meta.package}`);
 
   const sourceIds = [...builtin, ...installedMiru];
-  const results = await Promise.all(
-    sourceIds.map(async (sourceId) => {
-      const started = Date.now();
-      try {
-        const ok = await probeSourceHealth(sourceId);
-        return {
-          source: sourceId,
-          ok,
-          latency: Date.now() - started,
-        };
-      } catch (error) {
-        return {
-          source: sourceId,
-          ok: false,
-          latency: Date.now() - started,
-          error: String(error?.message || error),
-        };
-      }
-    })
-  );
+  const results = await healthMonitor.checkAll(sourceIds, { force: _url.searchParams.get("force") === "1" });
 
   writeJson(response, 200, { list: results });
 }
 
 async function probeSourceHealth(sourceId) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
-
-  try {
-    const miruPackage = parseMiruSourceId(sourceId);
-    if (miruPackage) {
-      if (!getRuntime(miruPackage)) {
-        throw new Error("扩展未加载");
-      }
-      const list = await searchMiru(miruPackage, HEALTH_QUERY);
-      return Array.isArray(list) && list.length > 0;
+  const miruPackage = parseMiruSourceId(sourceId);
+  if (miruPackage) {
+    if (!getRuntime(miruPackage)) {
+      throw new Error("扩展未加载");
     }
-
-    const source = watchSources[sourceId];
-    if (!source) throw new Error("未知片源");
-    if (source.kind === "torrent") {
-      const list = await (await loadMikanModule()).searchMikan(HEALTH_QUERY);
-      return Array.isArray(list) && list.length > 0;
-    }
-
-    const list =
-      source.type === "tokuzilla"
-        ? await searchTokuzilla("kamen rider")
-        : source.type === "xgcartoon"
-          ? await searchXgcartoon(source, HEALTH_QUERY)
-          : source.type === "maccms"
-            ? await searchMaccms(source, HEALTH_QUERY)
-            : [];
-
+    const list = await searchMiru(miruPackage, HEALTH_QUERY);
     return Array.isArray(list) && list.length > 0;
-  } finally {
-    clearTimeout(timer);
   }
+
+  const source = watchSources[sourceId];
+  if (!source) throw new Error("未知片源");
+  if (source.kind === "torrent") {
+    const list = await (await loadMikanModule()).searchMikan(HEALTH_QUERY);
+    return Array.isArray(list) && list.length > 0;
+  }
+
+  const list =
+    source.type === "tokuzilla"
+      ? await searchTokuzilla("kamen rider")
+      : source.type === "xgcartoon"
+        ? await searchXgcartoon(source, HEALTH_QUERY)
+        : source.type === "maccms"
+          ? await searchMaccms(source, HEALTH_QUERY)
+          : [];
+
+  return Array.isArray(list) && list.length > 0;
 }

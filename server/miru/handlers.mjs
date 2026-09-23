@@ -1,6 +1,7 @@
 import { writeJson } from "../utils.mjs";
 import { DEFAULT_MIRU_REPO } from "./config.mjs";
 import {
+  ensureMiruReady,
   fetchRepoIndex,
   getInstalledSources,
   installExtension,
@@ -27,6 +28,7 @@ export async function handleMiruRepo(url, response) {
 }
 
 export async function handleMiruInstalled(_url, response) {
+  await ensureMiruReady().catch(() => {});
   writeJson(response, 200, {
     list: listInstalledMeta(),
     sources: getInstalledSources(),
@@ -34,6 +36,7 @@ export async function handleMiruInstalled(_url, response) {
 }
 
 export async function handleMiruSources(_url, response) {
+  await ensureMiruReady().catch(() => {});
   writeJson(response, 200, { list: getInstalledSources() });
 }
 

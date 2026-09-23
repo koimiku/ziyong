@@ -378,6 +378,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
         if (requestId !== state.requestId) return;
         await attachStream(video, stream, state);
         if (requestId !== state.requestId) return;
+        document.dispatchEvent(new CustomEvent("anime:source-playback", { detail: { source: candidate.sourceId, ok: true, label: candidate.label } }));
         showPlaying("video");
         await seekToResume();
         await video.play().catch(() => {});
@@ -386,6 +387,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
         return;
       } catch (error) {
         lastError = error;
+        if (requestId !== state.requestId) return;
+        document.dispatchEvent(new CustomEvent("anime:source-playback", { detail: { source: candidate.sourceId, ok: false, label: candidate.label, error: error.message } }));
         console.warn(candidate.label, error);
         streamCache.delete(candidate.playApi);
       }

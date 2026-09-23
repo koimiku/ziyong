@@ -2,7 +2,6 @@ import {
   fetchMiruInstalled,
   fetchMiruRepo,
   fetchSourceHealth,
-  fetchSourcesHealth,
   installMiruExtension,
   refreshWatchSources,
   uninstallMiruExtension,
@@ -35,83 +34,100 @@ export async function initializeMiruPanel() {
   const healthButton = document.querySelector("#miruHealthButton");
   if (!listEl || !statusEl) return;
 
+  let rendering = false;
+  let repositoryRequested = false;
   async function render(options = {}) {
-    const { preserveScroll = false, silent = false } = options;
-    const scrollEl = preserveScroll ? findScrollContainer(listEl) : null;
-    const scrollTop = scrollEl?.scrollTop ?? 0;
-
-    if (!silent) {
-      statusEl.textContent = "正在加载 Miru 仓库...";
-    }
-    listEl.innerHTML = `<div class="sources-page-stack" id="sourcesPageStack"></div>`;
-
-    const stackEl = listEl.querySelector("#sourcesPageStack");
-
-    await refreshWatchSources();
-
-    let repoPayload = null;
-    let repoError = "";
-
+    if (rendering) return;
+    rendering = true;
     try {
-      repoPayload = await fetchMiruRepo();
-    } catch (error) {
-      repoError = error?.message || "连接失败";
-      console.warn(error);
-    }
+      const { preserveScroll = false, silent = false } = options;
+      const scrollEl = preserveScroll ? findScrollContainer(listEl) : null;
+      const scrollTop = scrollEl?.scrollTop ?? 0;
 
-    const installedPayload = await fetchMiruInstalled().catch(() => ({ list: [] }));
-    const installedPackages = new Set(
-      (installedPayload.list || []).map((item) => item.package)
-    );
-
-    renderBuiltinSources(stackEl);
-
-    const repoItems = repoPayload?.list?.length
-      ? repoPayload.list.filter(
-          (item) => /zh/i.test(item.lang || "") || installedPackages.has(item.package)
-        )
-      : installedPayload.list || [];
-
-    if (repoItems.length) {
-      statusEl.textContent = repoError
-        ? `仓库连接异常，但已显示 ${repoItems.length} 个扩展。`
-        : isTokusatsuMode()
-          ? `特摄分区 · Tokuzilla 已启用`
-          : `内置 ${onlineSources.filter((s) => s.partition !== "tokusatsu").length} 个在线片源 · Miru 仓库 ${repoItems.length} 个扩展`;
-      if (!isTokusatsuMode()) {
-        renderGroupedExtensions(repoItems, stackEl, installedPackages);
+      if (!silent) {
+        statusEl.textContent = "正在加载 Miru 仓库...";
       }
-    } else if (installedPayload.list?.length) {
-      statusEl.textContent = repoError
-        ? `Miru 仓库暂时不可用（${repoError}）。已安装 ${installedPayload.list.length} 个扩展。`
-        : `已安装 ${installedPayload.list.length} 个 Miru 扩展。`;
-      if (!isTokusatsuMode()) {
-        renderGroupedExtensions(installedPayload.list, stackEl, installedPackages, true);
-      }
-    } else {
-      statusEl.textContent = repoError
-        ? `Miru 仓库连接失败：${repoError}。内置片源仍可使用。`
-        : isTokusatsuMode()
-          ? "特摄分区使用 Tokuzilla 片源。"
-          : "Miru 仓库为空或暂时不可用，内置片源仍可用。";
-      if (!isTokusatsuMode()) {
-        stackEl.insertAdjacentHTML(
-          "beforeend",
-          `
-        <section class="miru-type-section sources-panel sources-empty-panel">
-          <p class="inline-empty">暂无 Miru 扩展，可稍后点刷新重试。</p>
-        </section>
-      `
-        );
-      }
-    }
+      listEl.innerHTML = `<div class="sources-page-stack" id="sourcesPageStack"></div>`;
 
-    runHealthChecks(listEl);
+      const stackEl = listEl.querySelector("#sourcesPageStack");
 
-    if (scrollEl) {
-      requestAnimationFrame(() => {
-        scrollEl.scrollTop = scrollTop;
-      });
+      renderBuiltinSources(stackEl);
+      applyHealthResults(listEl);
+      runHealthChecks(listEl);
+
+      let repoPayload = null;
+      let repoError = "";
+
+      try {
+        if (!document.querySelector("#miruView")?.hidden) {
+          repositoryRequested = true;
+          repoPayload = await fetchMiruRepo();
+        }
+      } catch (error) {
+        repoError = error?.message || "连接失败";
+        console.warn(error);
+      }
+
+      const installedPayload = await fetchMiruInstalled().catch(() => ({ list: [] }));
+      const installedPackages = new Set(
+        (installedPayload.list || []).map((item) => item.package)
+      );
+
+      await refreshWatchSources();
+
+      const repoItems = repoPayload?.list?.length
+        ? repoPayload.list.filter(
+            (item) => /zh/i.test(item.lang || "") || installedPackages.has(item.package)
+          )
+        : installedPayload.list || [];
+
+      if (repoItems.length) {
+        statusEl.textContent = repoError
+          ? `仓库连接异常，但已显示 ${repoItems.length} 个扩展。`
+          : isTokusatsuMode()
+            ? `特摄分区 · Tokuzilla 已启用`
+            : `内置 ${onlineSources.filter((s) => s.partition !== "tokusatsu").length} 个在线片源 · Miru 仓库 ${repoItems.length} 个扩展`;
+        if (!isTokusatsuMode()) {
+          renderGroupedExtensions(repoItems, stackEl, installedPackages);
+        }
+      } else if (installedPayload.list?.length) {
+        statusEl.textContent = repoError
+          ? `Miru 仓库暂时不可用（${repoError}）。已安装 ${installedPayload.list.length} 个扩展。`
+          : `已安装 ${installedPayload.list.length} 个 Miru 扩展。`;
+        if (!isTokusatsuMode()) {
+          renderGroupedExtensions(installedPayload.list, stackEl, installedPackages, true);
+        }
+      } else {
+        statusEl.textContent = repoError
+          ? `Miru 仓库连接失败：${repoError}。内置片源仍可使用。`
+          : isTokusatsuMode()
+            ? "特摄分区使用 Tokuzilla 片源。"
+            : "Miru 仓库为空或暂时不可用，内置片源仍可用。";
+        if (!isTokusatsuMode()) {
+          stackEl.insertAdjacentHTML(
+            "beforeend",
+            `
+          <section class="miru-type-section sources-panel sources-empty-panel">
+            <p class="inline-empty">暂无 Miru 扩展，可稍后点刷新重试。</p>
+          </section>
+        `
+          );
+        }
+      }
+
+      applyHealthResults(listEl);
+      runHealthChecks(listEl);
+
+      if (scrollEl) {
+        requestAnimationFrame(() => {
+          scrollEl.scrollTop = scrollTop;
+        });
+      }
+    } finally {
+      rendering = false;
+      if (!repositoryRequested && !document.querySelector("#miruView")?.hidden) {
+        render({ silent: true }).catch(console.warn);
+      }
     }
   }
 
@@ -152,6 +168,26 @@ export async function initializeMiruPanel() {
     runHealthChecks(listEl, true);
   });
 
+  document.addEventListener("anime:source-playback", event => {
+    playbackResults.set(event.detail.source, { ...event.detail, checkedAt: Date.now() });
+    applyHealthResults(listEl);
+  });
+  const autoToggle = document.querySelector("#sourceHealthAuto");
+  try { autoToggle.checked = localStorage.getItem("anime-auto-health") !== "off"; } catch {}
+  autoToggle?.addEventListener("change", () => {
+    try { localStorage.setItem("anime-auto-health", autoToggle.checked ? "on" : "off"); } catch {}
+    if (autoToggle.checked) runHealthChecks(listEl);
+  });
+  const checkWhenActive = () => {
+    if (!document.hidden && navigator.onLine && autoToggle?.checked) runHealthChecks(listEl);
+  };
+  setInterval(checkWhenActive, 600000);
+  document.addEventListener("visibilitychange", checkWhenActive);
+  window.addEventListener("online", checkWhenActive);
+  const view = document.querySelector("#miruView");
+  if (view) new MutationObserver(() => {
+    if (!view.hidden && !repositoryRequested) render({ silent: true });
+  }).observe(view, { attributes: true, attributeFilter: ["hidden"] });
   miruPanelRender = render;
   await render();
 }
@@ -168,7 +204,7 @@ function renderBuiltinSources(container) {
   section.innerHTML = `
     <div class="miru-type-head">
       <h4>${isTokusatsuMode() ? "特摄片源" : "内置在线片源"}</h4>
-      <span class="miru-type-meta">${sources.length} 个 · 默认可用</span>
+      <span class="miru-type-meta">${sources.length} 个 · 自动检查</span>
     </div>
     <p class="sources-panel-tip">${
       isTokusatsuMode()
@@ -292,7 +328,7 @@ function createSourceCard(item) {
   const badge = document.createElement("span");
   badge.className = "health-badge";
   badge.dataset.healthState = "pending";
-  badge.textContent = "检测中";
+  badge.textContent = item.healthTarget ? "待检测" : "未安装";
   foot.append(badge);
 
   if (item.type === "builtin") {
@@ -315,87 +351,76 @@ function createSourceCard(item) {
   return card;
 }
 
-async function runHealthChecks(listEl, force = false) {
-  const rows = [...listEl.querySelectorAll(".source-card[data-health-target]")].filter(
-    (row) => row.dataset.healthTarget
-  );
-  if (!rows.length) return;
+const healthResults = new Map();
+const playbackResults = new Map();
+const healthPending = new Map();
 
-  const statusEl = document.querySelector("#miruStatus");
-  if (statusEl && force) {
-    statusEl.textContent = "正在检测片源可用性...";
-  }
-
-  rows.forEach((row) => {
+function applyHealthResults(listEl) {
+  let count = 0, ok = 0, bad = 0, checkedAt = 0;
+  listEl.querySelectorAll(".source-card[data-health-target]").forEach(row => {
+    const id = row.dataset.healthTarget;
+    if (!id) return;
+    count++;
     const badge = row.querySelector(".health-badge");
+    const result = healthResults.get(id);
     if (!badge) return;
-    if (!force && badge.dataset.healthState === "ok") return;
-    badge.dataset.healthState = "checking";
-    badge.textContent = "检测中";
-    badge.className = "health-badge is-checking";
+    if (healthPending.has(id)) {
+      badge.className = "health-badge is-checking";
+      badge.textContent = "检测中…";
+      return;
+    }
+    if (!result) { badge.className = "health-badge"; badge.textContent = "待检测"; return; }
+    const state = result.status || (result.ok ? "ok" : "suspect");
+    if (state === "ok") ok++;
+    if (state === "unavailable" || state === "suspect") bad++;
+    checkedAt = Math.max(checkedAt, result.checkedAt || 0);
+    badge.dataset.healthState = state;
+    badge.className = 'health-badge ' + (state === 'ok' ? 'is-ok' : state === 'unavailable' ? 'is-fail' : 'is-warning');
+    const labels = { ok: '搜索正常', suspect: '疑似异常', unavailable: '暂不可用', unknown: '待确认' };
+    badge.textContent = (labels[state] || '待确认') + (state === 'ok' ? ' · ' + result.latency + 'ms' : '');
+    badge.title = [result.error || '搜索接口正常，不代表所有剧集都可播放', result.checkedAt ? new Date(result.checkedAt).toLocaleString() : ''].filter(Boolean).join(' · ');
+    row.dataset.health = state;
+    let detail = row.querySelector('.source-health-detail');
+    if (!detail) { detail = document.createElement('p'); detail.className = 'source-health-detail'; row.append(detail); }
+    const playback = playbackResults.get(id);
+    detail.textContent = playback
+      ? (playback.ok ? '最近直链已加载：' : '最近直链失败：') + playback.label + (playback.error ? ' · ' + playback.error : '')
+      : result.error || '已通过搜索接口检查';
   });
+  const summary = document.querySelector('#sourceHealthSummary');
+  if (summary) summary.textContent = healthPending.size
+    ? '正在检测，已完成 ' + healthResults.size + ' 个片源…'
+    : ok + '/' + count + ' 搜索正常 · ' + bad + ' 个异常' + (checkedAt ? ' · 最近检测 ' + new Date(checkedAt).toLocaleTimeString() : ' · 尚未检测');
+}
 
-  try {
-    let payload = await fetchSourcesHealth().catch(() => ({ list: [] }));
-    let list = Array.isArray(payload.list) ? payload.list : [];
-
-    // Fallback: probe each visible source individually when batch is empty.
-    if (!list.length) {
-      list = await Promise.all(
-        rows.map(async (row) => {
-          const sourceId = row.dataset.healthTarget;
-          try {
-            return await fetchSourceHealth(sourceId);
-          } catch (error) {
-            return {
-              source: sourceId,
-              ok: false,
-              latency: 0,
-              error: error?.message || "检测失败",
-            };
-          }
-        })
-      );
-    }
-
-    const healthMap = new Map(list.map((entry) => [entry.source, entry]));
-    let okCount = 0;
-
-    rows.forEach((row) => {
-      const badge = row.querySelector(".health-badge");
-      if (!badge) return;
-      const result = healthMap.get(row.dataset.healthTarget);
-      if (!result) {
-        badge.dataset.healthState = "unknown";
-        badge.className = "health-badge";
-        badge.textContent = "未测";
-        return;
-      }
-      if (result.ok) okCount += 1;
-      badge.dataset.healthState = result.ok ? "ok" : "fail";
-      badge.className = `health-badge ${result.ok ? "is-ok" : "is-fail"}`;
-      badge.textContent = result.ok
-        ? `可用 · ${result.latency}ms`
-        : result.error?.slice(0, 18) || "不可用";
-      badge.title = result.error || "";
-    });
-
-    if (statusEl && force) {
-      statusEl.textContent = `可用性检测完成：${okCount}/${rows.length} 可用`;
-    }
-  } catch (error) {
-    rows.forEach((row) => {
-      const badge = row.querySelector(".health-badge");
-      if (!badge) return;
-      badge.dataset.healthState = "fail";
-      badge.className = "health-badge is-fail";
-      badge.textContent = "检测失败";
-      badge.title = error.message || "";
-    });
-    if (statusEl && force) {
-      statusEl.textContent = error.message || "可用性检测失败";
-    }
+async function runHealthChecks(listEl, force = false) {
+  if (!force && document.querySelector('#sourceHealthAuto')?.checked === false) return;
+  if (!navigator.onLine) {
+    const summary = document.querySelector('#sourceHealthSummary');
+    if (summary) summary.textContent = '当前网络离线，恢复联网后自动检测';
+    return;
   }
+  const ids = [...new Set([...listEl.querySelectorAll('[data-health-target]')].map(row => row.dataset.healthTarget).filter(Boolean))];
+  const button = document.querySelector('#miruHealthButton');
+  const jobs = ids.map(id => {
+    if (healthPending.has(id)) return healthPending.get(id);
+    if (!force && Date.now() - (healthResults.get(id)?.checkedAt || 0) < 600000) return Promise.resolve();
+    const job = fetchSourceHealth(id, force).then(result => {
+      healthResults.set(id, { ...result, checkedAt: result.checkedAt || Date.now() });
+    }).catch(error => {
+      // Local service failures are not evidence that the remote source is dead.
+      healthResults.set(id, { source: id, status: 'unknown', checkedAt: Date.now(), error: '检测服务异常：' + error.message });
+    }).finally(() => {
+      healthPending.delete(id);
+      applyHealthResults(listEl);
+      if (button) button.disabled = healthPending.size > 0;
+    });
+    healthPending.set(id, job);
+    return job;
+  });
+  if (button) button.disabled = healthPending.size > 0;
+  applyHealthResults(listEl);
+  await Promise.all(jobs);
 }
 
 function findScrollContainer(fromEl) {

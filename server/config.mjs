@@ -79,15 +79,6 @@ export const watchSources = {
     detailUrl: (id) =>
       `https://mikanani.me/Home/Search?searchstr=${encodeURIComponent(id)}`,
   },
-  tokuzilla: {
-    name: "Tokuzilla",
-    type: "tokuzilla",
-    kind: "online",
-    partition: "tokusatsu",
-    origin: "https://tokuzilla.net",
-    detailUrl: (slug) => `https://tokuzilla.net/watch/${slug}.html`,
-    searchUrl: (query) => `https://tokuzilla.net/?s=${encodeURIComponent(query)}`,
-  },
 };
 
 export const browserHeaders = {

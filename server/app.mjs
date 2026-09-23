@@ -10,7 +10,6 @@ import {
   handleSourcePlay,
   handleSourceSearch,
   handleSourcesHealth,
-  handleTokuzillaLatest,
 } from "./handlers.mjs";
 import { handleBangumiCalendar, warmupBangumiCalendar } from "./bangumi.mjs";
 import { handleBangumiGateway } from "./bangumi-gateway.mjs";
@@ -69,7 +68,8 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
       }
 
       if (url.pathname === "/api/tokuzilla/latest") {
-        await handleTokuzillaLatest(url, response);
+        response.writeHead(410, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: "特摄分区已移除" }));
         return;
       }
 
@@ -158,14 +158,22 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
       }
 
       const ext = extname(filePath);
+      const stat = statSync(filePath);
+      const etag = `W/"${stat.size}-${stat.mtimeMs}"`;
+      if (request.headers["if-none-match"] === etag) {
+        response.writeHead(304, { ETag: etag, "Cache-Control": "no-cache" });
+        response.end();
+        return;
+      }
       const cacheControl =
         ext === ".html" || ext === ".js" || ext === ".mjs" || ext === ".css"
-          ? "no-store"
+          ? "no-cache"
           : "public, max-age=3600";
 
       response.writeHead(200, {
         "Content-Type": staticTypes[ext] || "application/octet-stream",
         "Cache-Control": cacheControl,
+        ETag: etag,
       });
       createReadStream(filePath).pipe(response);
     });
@@ -192,7 +200,9 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
           console.log("Phone access:");
           urls.slice(1).forEach((entry) => console.log(`  ${entry}`));
         }
-        warmupBangumiCalendar();
+        const warmup = setTimeout(() => warmupBangumiCalendar(), 1500);
+        warmup.unref?.();
+        server.once("close", () => clearTimeout(warmup));
         resolvePromise({ server, port: resolvedPort, url: urls[0], urls, host });
       };
 
@@ -203,11 +213,10 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
 
     setMiruRoot(root);
     setWatchHistoryRoot(root);
-    ensureMiruReady(root)
-      .then(() => tryListen(port, 20))
-      .catch((error) => {
-        console.warn("[miru] init failed, starting without extensions", error);
-        tryListen(port, 20);
-      });
+    // The UI and built-in sources must not wait for extension downloads.
+    tryListen(port, 20);
+    setImmediate(() => ensureMiruReady(root).catch(error => {
+      console.warn("[miru] init failed, starting without extensions", error);
+    }));
   });
 }

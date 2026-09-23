@@ -8,16 +8,16 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="anime" />
     <title>anime - 动漫搜索</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <script>
+      try {
+        const mode = localStorage.getItem("anime-theme") || localStorage.getItem("fanxun-theme") || "light";
+        document.documentElement.dataset.theme = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+      } catch {}
+    </script>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css" /><link rel="stylesheet" href="./client/ui-polish.css" />
   </head>
   <body>
     <header class="desktop-titlebar" id="desktopTitlebar" hidden aria-label="窗口标题栏">
@@ -50,10 +50,7 @@
       <button class="icon-button mobile-menu-button" id="mobileMenuButton" type="button" aria-label="筛选">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v1.8H4V7Zm0 4.1h16v1.8H4v-1.8Zm0 4.1h16V17H4v-1.8Z"/></svg>
       </button>
-      <div class="mobile-header-partition icon-rail-partition" id="mobileContentModeToggle" role="group" aria-label="内容分区">
-        <button class="partition-button active" type="button" data-content-mode="anime" title="动漫">漫</button>
-        <button class="partition-button" type="button" data-content-mode="tokusatsu" title="特摄">摄</button>
-      </div>
+      <div class="mobile-header-title"><strong>anime</strong></div>
       <button class="icon-button mobile-search-button" id="mobileSearchButton" type="button" aria-label="搜索">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
       </button>
@@ -122,7 +119,7 @@
         <span>片源</span>
       </button>
       <button type="button" data-mobile-tab="settings" aria-label="设置">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm8.94 4.46-1.2-.18a6.9 6.9 0 0 0-.85-2.05l.75-1-.85-.85-1 .75a6.9 6.9 0 0 0-2.05-.85l-.18-1.2h-1.2l-.18 1.2a6.9 6.9 0 0 0-2.05.85l-1-.75-.85.85.75 1a6.9 6.9 0 0 0-.85 2.05l-1.2.18v1.2l1.2.18c.18.73.47 1.42.85 2.05l-.75 1 .85.85 1-.75c.63.38 1.32.67 2.05.85l.18 1.2h1.2l.18-1.2a6.9 6.9 0 0 0 2.05-.85l1 .75.85-.85-.75-1c.38-.63.67-1.32.85-2.05l1.2-.18v-1.2Z"/></svg>
+        <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5 10 2h4l.5 1.5.4 1.4 1.3.8 1.4-.4 1.5-.3 2 3.4-1 1.2-1 1v1.6l1 1 1 1.2-2 3.4-1.5-.3-1.4-.4-1.3.8-.4 1.4L14 22h-4l-.5-1.5-.4-1.4-1.3-.8-1.4.4-1.5.3-2-3.4 1-1.2 1-1v-1.6l-1-1-1-1.2 2-3.4 1.5.3 1.4.4 1.3-.8z"/><circle cx="12" cy="12" r="3.2"/></svg>
         <span>设置</span>
       </button>
     </nav>
@@ -134,10 +131,7 @@
         <div class="icon-rail-brand-wrap">
           <button class="icon-rail-brand" type="button" id="homeButton" aria-label="返回探索">A</button>
         </div>
-        <div class="icon-rail-partition" id="contentModeToggle" role="group" aria-label="内容分区">
-          <button class="partition-button active" type="button" data-content-mode="anime" title="动漫">漫</button>
-          <button class="partition-button" type="button" data-content-mode="tokusatsu" title="特摄">摄</button>
-        </div>
+
         <button class="rail-button" type="button" id="headerSearchButton" aria-label="搜索">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
         </button>
@@ -152,7 +146,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 2v16h10V4H7Zm5 17a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
           </button>
           <button class="rail-button" type="button" data-nav-view="settings" aria-label="设置">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm8.94 4.46-1.2-.18a6.9 6.9 0 0 0-.85-2.05l.75-1-.85-.85-1 .75a6.9 6.9 0 0 0-2.05-.85l-.18-1.2h-1.2l-.18 1.2a6.9 6.9 0 0 0-2.05.85l-1-.75-.85.85.75 1a6.9 6.9 0 0 0-.85 2.05l-1.2.18v1.2l1.2.18c.18.73.47 1.42.85 2.05l-.75 1 .85.85 1-.75c.63.38 1.32.67 2.05.85l.18 1.2h1.2l.18-1.2a6.9 6.9 0 0 0 2.05-.85l1 .75.85-.85-.75-1c.38-.63.67-1.32.85-2.05l1.2-.18v-1.2Z"/></svg>
+            <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5 10 2h4l.5 1.5.4 1.4 1.3.8 1.4-.4 1.5-.3 2 3.4-1 1.2-1 1v1.6l1 1 1 1.2-2 3.4-1.5-.3-1.4-.4-1.3.8-.4 1.4L14 22h-4l-.5-1.5-.4-1.4-1.3-.8-1.4.4-1.5.3-2-3.4 1-1.2 1-1v-1.6l-1-1-1-1.2 2-3.4 1.5.3 1.4.4 1.3-.8z"/><circle cx="12" cy="12" r="3.2"/></svg>
           </button>
         </div>
       </nav>
@@ -292,7 +286,7 @@
           <div class="settings-card" id="bangumiSyncCard">
             <h3>Bangumi 同步</h3>
             <p class="settings-update-desc">
-              像 Animeko 一样用 Bangumi 账号同步<strong>番剧看到第几集</strong>（电脑/手机同一账号）。特摄与集内秒数仍只保存在本机。
+              像 Animeko 一样用 Bangumi 账号同步<strong>番剧看到第几集</strong>（电脑/手机同一账号）。集内秒数仍只保存在本机。
             </p>
             <p id="bangumiUserLine">未登录</p>
             <p class="settings-update-status" id="bangumiSyncStatus"></p>
@@ -339,10 +333,15 @@
               <p class="sources-page-desc">内置在线源与 Miru 扩展，播放番剧时自动匹配可用线路。</p>
             </div>
             <div class="sources-page-actions">
-              <button class="ghost-button" id="miruHealthButton" type="button">检测可用性</button>
+              <button class="ghost-button" id="miruHealthButton" type="button">立即检测</button>
               <button class="ghost-button" id="miruRefreshButton" type="button">刷新</button>
             </div>
           </header>
+          <div class="source-health-summary">
+            <div><strong>片源健康检查</strong><p id="sourceHealthSummary" role="status" aria-live="polite">准备检测片源…</p></div>
+            <label class="health-auto-toggle"><input id="sourceHealthAuto" type="checkbox" checked />自动检测 · 每 10 分钟</label>
+          </div>
+          <p class="sources-health-note">检查搜索接口是否正常；连续异常会标记为暂不可用。单集是否可播放仍以实际播放结果为准。</p>
           <p class="miru-status" id="miruStatus">正在连接官方仓库...</p>
           <div class="miru-extension-list" id="miruExtensionList"></div>
         </section>
@@ -364,6 +363,7 @@
     <div class="search-backdrop" id="searchBackdrop"></div>
     <div class="search-dialog" id="searchDialog" role="dialog" aria-modal="true" aria-label="搜索">
       <form class="search-dialog-form" id="mobileSearchForm" role="search" autocomplete="off">
+        <div class="search-dialog-row">
         <div class="search-dialog-field">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm8.38 2.12-3.9-3.9 1.42-1.42 3.9 3.9-1.42 1.42Z"/></svg>
           <input
@@ -377,12 +377,14 @@
             aria-expanded="false"
           />
         </div>
+          <button class="small-button search-dialog-submit" type="submit">搜索</button>
+        </div>
         <div class="search-suggest search-dialog-suggest" id="mobileSearchSuggest" role="listbox" hidden></div>
         <div class="search-dialog-actions">
-          <button class="small-button" type="submit">搜索</button>
-          <button class="ghost-button" id="searchClose" type="button">取消</button>
+          <p class="search-dialog-tip">支持番剧名、中文名与别名搜索</p>
+
         </div>
-        <p class="search-dialog-tip">支持番剧与特摄分区搜索</p>
+
       </form>
     </div>
 
