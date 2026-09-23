@@ -2,7 +2,7 @@ import { writeJson } from "./utils.mjs";
 import { browserHeaders } from "./config.mjs";
 
 const BANGUMI_ORIGIN = "https://api.bgm.tv";
-const DEFAULT_UA = "ziyong/1.4.0 (https://github.com/koimiku/ziyong)";
+const DEFAULT_UA = "ziyong/1.4.1 (https://github.com/koimiku/ziyong)";
 
 function readBody(request) {
   return new Promise((resolve, reject) => {

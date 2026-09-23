@@ -1,7 +1,7 @@
 {
-  "version": "1.4.0",
-  "name": "v1.4.0",
-  "notes": "Bangumi 进度同步、修复手机搜索、更换应用图标。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.0",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.0"
+  "version": "1.4.1",
+  "name": "v1.4.1",
+  "notes": "去掉特摄分区，并加上片源自动健康检查。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.1",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.1"
 }
