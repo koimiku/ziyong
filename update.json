@@ -1,7 +1,7 @@
 {
-  "version": "1.4.4",
-  "name": "v1.4.4",
-  "notes": "修复 Bangumi 同步点击无反应，支持一键安装片源，并调整手机顶栏布局。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.4",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.4/app-release.apk"
+  "version": "1.4.5",
+  "name": "v1.4.5",
+  "notes": "年份、排序和主题改为应用内下拉；搜索栏和侧边栏加入打开与关闭动画。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.5",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.5/app-release.apk"
 }
