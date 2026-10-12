@@ -1,7 +1,7 @@
 {
-  "version": "1.4.2",
-  "name": "v1.4.2",
-  "notes": "修复 Bangumi 同步 400，支持在应用内下载并安装更新。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.2",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.2/app-release.apk"
+  "version": "1.4.3",
+  "name": "v1.4.3",
+  "notes": "支持 Kazumi 规则片源，并修复 Bangumi 动画进度同步返回 400。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.3",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.3/app-release.apk"
 }
