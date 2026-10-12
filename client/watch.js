@@ -8,6 +8,7 @@ import {
   findEpisodeIndex,
   findSourceIndex,
   renderEpisodeSourceChips,
+  sourceOptionLabel,
 } from "./episode-sources.js";
 import { bindSourcePlayer, renderEpisodeTabs } from "./player.js";
 import { initializeMobile, syncMobileWatchState } from "./mobile.js";
@@ -184,7 +185,7 @@ function getAuthorizedPlayers(bangumiId) {
 function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, title, resume) {
   if (!playlists.length) {
     return {
-      player: renderSourceFallback(sourceResults, title),
+      player: renderSourceFallback(),
       support: renderEmptySupport(item, title, sourceResults),
     };
   }
@@ -215,14 +216,6 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
             hidden
             title="${escapeAttribute(`${initialPlaylist.sourceName} ${initialEpisode.label}`)}"
           ></video>
-          <iframe
-            id="sourceEmbed"
-            hidden
-            title="原站播放器"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowfullscreen
-            referrerpolicy="no-referrer-when-downgrade"
-          ></iframe>
           <div class="player-status" id="sourcePlayerStatus" hidden></div>
           <button class="play-start-button" id="playStartButton" type="button">
             <span class="play-start-icon" aria-hidden="true">▶</span>
@@ -241,24 +234,32 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
           <strong>选集</strong>
           <span id="episodeCountLabel">${episodeSourceMap.length} 集</span>
         </div>
-        <div class="episode-tabs entry-episode-tabs" id="episodeTabs">
-          ${renderEpisodeTabs(
-            episodeSourceMap.map((entry) => ({ label: entry.label, nid: entry.nid })),
-            episodeIndex
-          )}
+        <div class="option-dropdown" id="episodeDropdown">
+          <button class="option-dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="episodeDropdownValue">${escapeHtml(episodeEntry?.label || "选择集数")}</span>
+            <span class="option-dropdown-caret" aria-hidden="true"></span>
+          </button>
+          <div class="option-dropdown-menu" id="episodeTabs" role="listbox" hidden>
+            ${renderEpisodeTabs(
+              episodeSourceMap.map((entry) => ({ label: entry.label, nid: entry.nid })),
+              episodeIndex
+            )}
+          </div>
         </div>
       </section>
 
       <section class="media-selector entry-panel" aria-label="同集多源">
         <div class="support-section-title">
           <strong>片源线路</strong>
-          <a class="text-link" id="sourceOpenLink" href="${escapeAttribute(
-            initialEpisode.pageUrl
-          )}" target="_blank" rel="noreferrer">原站打开</a>
         </div>
-        <p class="entry-panel-tip">同一集可在多个站点间切换，优先使用你选中的线路。</p>
-        <div class="episode-source-chips" id="episodeSourceChips">
-          ${renderEpisodeSourceChips(episodeEntry, sourceIndex)}
+        <div class="option-dropdown" id="sourceDropdown">
+          <button class="option-dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="sourceDropdownValue">${escapeHtml(sourceOptionLabel(initialSource || {}) || "选择片源")}</span>
+            <span class="option-dropdown-caret" aria-hidden="true"></span>
+          </button>
+          <div class="option-dropdown-menu" id="episodeSourceChips" role="listbox" hidden>
+            ${renderEpisodeSourceChips(episodeEntry, sourceIndex)}
+          </div>
         </div>
       </section>
 
@@ -303,48 +304,12 @@ function renderBangumiLink(item) {
   `;
 }
 
-function renderSourceFallback(sourceResults, title) {
-  const blocks = sourceResults
-    .map(({ source, matches }) => {
-      const items = matches.length
-        ? matches
-            .map(
-              (match) => `
-                <a class="watch-link primary" href="${escapeAttribute(match.url)}" target="_blank" rel="noreferrer">
-                  <span>
-                    <strong>${escapeHtml(source.name)}</strong>
-                    <em>${escapeHtml(match.name)}</em>
-                  </span>
-                  <span aria-hidden="true">↗</span>
-                </a>
-              `
-            )
-            .join("")
-        : `
-          <a class="watch-link primary" href="${escapeAttribute(source.searchUrl(title))}" target="_blank" rel="noreferrer">
-            <span>
-              <strong>${escapeHtml(source.name)}</strong>
-              <em>打开站内搜索</em>
-            </span>
-            <span aria-hidden="true">↗</span>
-          </a>
-        `;
-
-      return `
-        <div class="source-group">
-          <div class="source-group-title">${escapeHtml(source.name)}</div>
-          <div class="link-list source-links">${items}</div>
-        </div>
-      `;
-    })
-    .join("");
-
+function renderSourceFallback() {
   return `
     <div class="source-header">
       <strong>在线观看</strong>
-      <span>暂时无法内嵌播放，可跳转到站点观看。</span>
+      <span>没有解析到可播放的直链，请换一部或稍后再试。</span>
     </div>
-    ${blocks}
   `;
 }
 
@@ -356,18 +321,17 @@ function renderAlternateMatches(sourceResults) {
   if (!extras.length) return "";
 
   return `
-    <div class="source-group">
-      <div class="source-group-title">其他匹配</div>
-      <div class="link-list source-links">
+    <div class="option-dropdown">
+      <button class="option-dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <span>其他匹配 · ${extras.length}</span>
+        <span class="option-dropdown-caret" aria-hidden="true"></span>
+      </button>
+      <div class="option-dropdown-menu" role="listbox" hidden>
         ${extras
           .map(
             ({ source, match }) => `
-              <a class="watch-link" href="${escapeAttribute(match.url)}" target="_blank" rel="noreferrer">
-                <span>
-                  <strong>${escapeHtml(source.name)}</strong>
-                  <em>${escapeHtml(match.name)}</em>
-                </span>
-                <span aria-hidden="true">↗</span>
+              <a class="option-dropdown-item" href="${escapeAttribute(match.url)}" target="_blank" rel="noreferrer">
+                ${escapeHtml(source.name)} · ${escapeHtml(match.name)}
               </a>
             `
           )

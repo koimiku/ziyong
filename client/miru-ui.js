@@ -40,12 +40,13 @@ export async function initializeMiruPanel() {
   if (!listEl || !statusEl) return;
 
   let rendering = false;
+  let installingAll = false;
   let repositoryRequested = false;
   async function render(options = {}) {
     if (rendering) return;
     rendering = true;
     try {
-      const { preserveScroll = false, silent = false } = options;
+      const { preserveScroll = false, silent = false, statusText = "" } = options;
       const scrollEl = preserveScroll ? findScrollContainer(listEl) : null;
       const scrollTop = scrollEl?.scrollTop ?? 0;
 
@@ -63,6 +64,7 @@ export async function initializeMiruPanel() {
         });
       }
       document.querySelector("#kazumiImportForm")?.toggleAttribute("hidden", isTokusatsuMode());
+      document.querySelector("#installAllSourcesButton")?.toggleAttribute("hidden", isTokusatsuMode());
       applyHealthResults(listEl);
       runHealthChecks(listEl);
 
@@ -128,6 +130,7 @@ export async function initializeMiruPanel() {
 
       applyHealthResults(listEl);
       runHealthChecks(listEl);
+      if (statusText) statusEl.textContent = statusText;
 
       if (scrollEl) {
         requestAnimationFrame(() => {
@@ -136,7 +139,7 @@ export async function initializeMiruPanel() {
       }
     } finally {
       rendering = false;
-      if (!repositoryRequested && !document.querySelector("#miruView")?.hidden) {
+      if (!installingAll && !repositoryRequested && !document.querySelector("#miruView")?.hidden) {
         render({ silent: true }).catch(console.warn);
       }
     }
@@ -209,13 +212,117 @@ export async function initializeMiruPanel() {
     }
   });
 
+  const installAllButton = document.querySelector("#installAllSourcesButton");
+
   refreshButton?.addEventListener("click", () => {
-    render({ preserveScroll: true, silent: true });
+    if (installingAll) return;
+    statusEl.textContent = "正在刷新片源…";
+    void render({ preserveScroll: true });
   });
 
   healthButton?.addEventListener("click", () => {
     runHealthChecks(listEl, true);
   });
+
+  installAllButton?.addEventListener("click", () => {
+    void installAllSources();
+  });
+
+  async function installAllSources() {
+    if (installingAll || !installAllButton || installAllButton.disabled) return;
+    installingAll = true;
+    const idleLabel = "一键安装全部";
+    installAllButton.disabled = true;
+    installAllButton.classList.add("is-busy");
+    installAllButton.textContent = "正在准备…";
+    try {
+      if (isTokusatsuMode()) {
+        statusEl.textContent = "特摄分区使用内置片源，无需安装接口。";
+        return;
+      }
+
+      statusEl.textContent = "正在读取可安装接口…";
+      const [miruResult, kazumiResult] = await Promise.allSettled([
+        fetchMiruRepo(),
+        fetchKazumiRepo(),
+      ]);
+      if (miruResult.status === "rejected" && kazumiResult.status === "rejected") {
+        throw new Error(
+          miruResult.reason?.message || kazumiResult.reason?.message || "仓库连接失败"
+        );
+      }
+
+      const miruTargets = (miruResult.status === "fulfilled" ? miruResult.value.list || [] : [])
+        .filter((item) => item?.package && !item.installed && /zh/i.test(item.lang || ""));
+      const kazumiTargets = (kazumiResult.status === "fulfilled" ? kazumiResult.value.list || [] : [])
+        .filter(
+          (item) => item?.name && !item.installed && (!item.type || item.type === "anime")
+        );
+      const jobs = [
+        ...miruTargets.map((item) => ({
+          kind: "miru",
+          id: item.package,
+          name: item.name || item.package,
+        })),
+        ...kazumiTargets.map((item) => ({
+          kind: "kazumi",
+          id: item.name,
+          name: item.name,
+        })),
+      ];
+
+      if (!jobs.length) {
+        const repoFailed = miruResult.status === "rejected" || kazumiResult.status === "rejected";
+        statusEl.textContent = repoFailed
+          ? "没有新的可安装接口。部分仓库暂时连不上，已安装的仍可使用。"
+          : "可安装的接口都已经装好了。";
+        return;
+      }
+
+      statusEl.textContent = `准备安装 ${jobs.length} 个接口…`;
+      let finished = 0;
+      let ok = 0;
+      const failed = [];
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(3, jobs.length) }, async () => {
+        while (cursor < jobs.length) {
+          const job = jobs[cursor];
+          cursor += 1;
+          statusEl.textContent = `正在安装 ${finished + 1}/${jobs.length}：${job.name}`;
+          installAllButton.textContent = `安装中 ${finished}/${jobs.length}`;
+          try {
+            if (job.kind === "miru") await installMiruExtension(job.id);
+            else await installKazumiRule(job.id);
+            ok += 1;
+            markSourceInstalled(listEl, job);
+          } catch (error) {
+            failed.push(job.name);
+            console.warn(error);
+          } finally {
+            finished += 1;
+            installAllButton.textContent = `安装中 ${finished}/${jobs.length}`;
+          }
+        }
+      });
+      await Promise.all(workers);
+
+      const failPreview = failed.slice(0, 3).join("、");
+      const summary = failed.length
+        ? `已安装 ${ok} 个接口，${failed.length} 个失败${failPreview ? `：${failPreview}` : ""}${failed.length > 3 ? "…" : ""}。`
+        : `已安装全部 ${ok} 个接口。`;
+      while (rendering) await new Promise((resolve) => setTimeout(resolve, 40));
+      await render({ preserveScroll: true, silent: true, statusText: summary });
+      statusEl.textContent = summary;
+    } catch (error) {
+      console.warn(error);
+      statusEl.textContent = error?.message || "一键安装失败";
+    } finally {
+      installingAll = false;
+      installAllButton.disabled = false;
+      installAllButton.classList.remove("is-busy");
+      installAllButton.textContent = idleLabel;
+    }
+  }
 
   document.addEventListener("anime:source-playback", event => {
     playbackResults.set(event.detail.source, { ...event.detail, checkedAt: Date.now() });
@@ -454,7 +561,7 @@ function createSourceCard(item) {
   } else {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "small-button";
+    button.className = "small-button source-action-button";
     if (item.kazumi) {
       button.dataset.kazumiName = item.package || "";
       button.dataset.kazumiAction = action;
@@ -556,6 +663,25 @@ function findScrollContainer(fromEl) {
     node = node.parentElement;
   }
   return document.scrollingElement || document.documentElement;
+}
+
+function markSourceInstalled(listEl, job) {
+  const selector =
+    job.kind === "kazumi"
+      ? `button[data-kazumi-name="${CSS.escape(job.id)}"]`
+      : `button[data-package="${CSS.escape(job.id)}"]`;
+  const button = listEl.querySelector(selector);
+  const card = button?.closest(".source-card");
+  if (!button || !card) return;
+  if (job.kind === "kazumi") {
+    button.dataset.kazumiAction = "uninstall";
+    card.dataset.healthTarget = `kazumi:${job.id}`;
+    const hint = card.querySelector(".source-card-hint");
+    if (hint && !/v\d/i.test(hint.textContent || "")) hint.textContent = "已安装";
+    resetActionButton(button, "移除");
+    return;
+  }
+  updateCardAfterAction(card, job.id, true);
 }
 
 function setActionButtonBusy(button, label) {

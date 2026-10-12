@@ -16,7 +16,7 @@ const EPISODE_PAGE = 100;
 const EPISODE_BATCH = 80;
 
 let syncTimer = null;
-let syncing = false;
+let syncPromise = null;
 
 export function getBangumiToken() {
   try {
@@ -243,14 +243,20 @@ async function pushSubjectProgress(token, subjectId, episodeNumber, { finished =
   await markEpisodesWatched(token, subjectId, episodeIds);
 }
 
-export async function syncBangumiHistory({ reason = "manual" } = {}) {
+export function syncBangumiHistory({ reason = "manual" } = {}) {
+  if (syncPromise) return syncPromise;
+  syncPromise = runBangumiSync(reason).finally(() => {
+    syncPromise = null;
+  });
+  return syncPromise;
+}
+
+async function runBangumiSync(reason) {
   const token = getBangumiToken();
   const user = getBangumiUser();
   if (!token || !user?.username) {
     throw new Error("尚未登录 Bangumi");
   }
-  if (syncing) return getWatchHistory();
-  syncing = true;
 
   try {
     const collections = await fetchAllCollections(token, user.username);
@@ -279,8 +285,6 @@ export async function syncBangumiHistory({ reason = "manual" } = {}) {
   } catch (error) {
     setMeta({ lastError: String(error?.message || error) });
     throw error;
-  } finally {
-    syncing = false;
   }
 }
 

@@ -32,12 +32,26 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .header-search-field input:focus-visible { outline: none; }
 .anime-card, .media-card { transition: transform 160ms ease, box-shadow 160ms ease; }
 .anime-card img, .media-card img { background: var(--surface-2); }
-.sources-page-actions button { min-height: 42px; }
+.sources-page-actions { gap: 10px; flex-wrap: wrap; }
+.sources-page-actions button { min-height: 46px; padding: 0 18px; border-radius: 14px; }
+.settings-update-actions .settings-action,
+.bangumi-sync-actions .settings-action {
+  min-height: 48px;
+  min-width: 148px;
+  padding: 0 22px;
+  border-radius: 14px;
+  font-size: 15px;
+}
 @media (max-width: 780px) {
   .source-health-summary { padding: 16px; gap: 8px; }
   .sources-card-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
-  .sources-page-actions { width: 100%; }
-  .sources-page-actions button { flex: 1; min-height: 44px; }
+  .sources-page-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .sources-page-actions button { width: 100%; min-height: 48px; flex: none; }
+  #installAllSourcesButton { grid-column: 1 / -1; }
+  .settings-update-actions,
+  .bangumi-sync-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .settings-update-actions .settings-action,
+  .bangumi-sync-actions .settings-action { width: 100%; min-width: 0; min-height: 48px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -105,7 +119,7 @@ button:disabled { cursor: default; }
 .hero-card .score { color: #dedcff; }
 .hero-card .badge { color: #fff; background: rgba(10, 14, 28, .6); }
 .hero-card h3 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-[data-theme="dark"] :is(.small-button, .icon-button, .mobile-search-button, .mobile-menu-button, .icon-rail-brand, .desktop-titlebar-mark) { color: #17162e; }
+[data-theme="dark"] :is(.small-button, .icon-rail-brand, .desktop-titlebar-mark) { color: #17162e; }
 [data-theme="dark"] .card-play { color: #4845b8; }
 @media (max-width: 480px) {
   .media-row-head { flex-wrap: wrap; gap: 6px 12px; }

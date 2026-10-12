@@ -90,16 +90,14 @@ export function renderEpisodeSourceChips(episodeEntry, activeSourceIndex) {
   if (!episodeEntry?.sources?.length) return "";
   return episodeEntry.sources
     .map((source, index) => {
-      const siteName = source.sourceName.replace(/ · Miru$/, "");
-      const lineName = String(source.lineName || "").trim();
-      const label =
-        lineName && lineName !== siteName ? `${siteName} · ${lineName}` : siteName;
+      const label = sourceOptionLabel(source);
       return `
         <button
-          class="episode-source-chip${index === activeSourceIndex ? " active" : ""}"
+          class="option-dropdown-item${index === activeSourceIndex ? " active" : ""}"
           type="button"
+          role="option"
+          aria-selected="${index === activeSourceIndex ? "true" : "false"}"
           data-source-index="${index}"
-          title="${escapeAttr(label)}"
         >
           ${escapeHtml(label)}
         </button>
@@ -108,13 +106,15 @@ export function renderEpisodeSourceChips(episodeEntry, activeSourceIndex) {
     .join("");
 }
 
+export function sourceOptionLabel(source) {
+  const siteName = String(source?.sourceName || "").replace(/ · Miru$/, "");
+  const lineName = String(source?.lineName || "").trim();
+  return lineName && lineName !== siteName ? `${siteName} · ${lineName}` : siteName;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/"/g, "&quot;");
 }

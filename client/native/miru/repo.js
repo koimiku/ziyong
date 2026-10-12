@@ -115,8 +115,14 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = REPO_TIMEOUT_MS) 
   }
 }
 
+const repoIndexCache = new Map();
+const REPO_INDEX_TTL_MS = 2 * 60 * 1000;
+
 export async function fetchRepoIndex(repoUrl = DEFAULT_MIRU_REPO) {
   const base = String(repoUrl || DEFAULT_MIRU_REPO).replace(/\/$/, "");
+  const cached = repoIndexCache.get(base);
+  if (cached && Date.now() - cached.at < REPO_INDEX_TTL_MS) return cached.list;
+
   const response = await fetchWithTimeout(`${base}/index.json`, {
     headers: {
       Accept: "application/json",
@@ -127,7 +133,9 @@ export async function fetchRepoIndex(repoUrl = DEFAULT_MIRU_REPO) {
     throw new Error(`Miru repo failed: ${response.status}`);
   }
   const list = await response.json();
-  return Array.isArray(list) ? list : [];
+  const items = Array.isArray(list) ? list : [];
+  repoIndexCache.set(base, { at: Date.now(), list: items });
+  return items;
 }
 
 export async function installExtension(packageName, repoUrl = DEFAULT_MIRU_REPO) {

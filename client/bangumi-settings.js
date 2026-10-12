@@ -21,6 +21,15 @@ function formatTime(ts) {
   }
 }
 
+function setSyncStatus(text, tone = "") {
+  const status = document.querySelector("#bangumiSyncStatus");
+  if (!status) return;
+  status.textContent = text;
+  status.classList.toggle("is-error", tone === "error");
+  status.classList.toggle("is-busy", tone === "busy");
+  status.classList.toggle("is-ok", tone === "ok");
+}
+
 function renderBangumiSettings() {
   const status = document.querySelector("#bangumiSyncStatus");
   const userLine = document.querySelector("#bangumiUserLine");
@@ -38,10 +47,10 @@ function renderBangumiSettings() {
       : "未登录：电脑和手机用同一 Bangumi 账号即可同步番剧进度。";
   }
 
-  if (status) {
-    const parts = [`上次同步：${formatTime(meta.lastSyncAt)}`];
-    if (meta.lastError) parts.push(`错误：${meta.lastError}`);
-    status.textContent = parts.join(" · ");
+  if (status && !status.classList.contains("is-busy")) {
+    if (meta.lastError) setSyncStatus(meta.lastError, "error");
+    else if (meta.lastSyncAt) setSyncStatus(`已同步 · ${formatTime(meta.lastSyncAt)}`, "ok");
+    else setSyncStatus("尚未同步");
   }
 
   if (tokenInput) {
@@ -55,16 +64,35 @@ function renderBangumiSettings() {
   if (syncButton) syncButton.hidden = !loggedIn;
 }
 
-async function withBusy(button, task) {
-  if (!button) return task();
-  const label = button.textContent;
+function setButtonBusy(button, label) {
   button.disabled = true;
-  button.textContent = "处理中…";
+  button.classList.add("is-busy");
+  button.setAttribute("aria-busy", "true");
+  button.replaceChildren();
+  const spinner = document.createElement("span");
+  spinner.className = "btn-spinner";
+  spinner.setAttribute("aria-hidden", "true");
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.append(spinner, text);
+}
+
+function clearButtonBusy(button, label) {
+  button.disabled = false;
+  button.classList.remove("is-busy");
+  button.removeAttribute("aria-busy");
+  button.textContent = label;
+}
+
+async function withBusy(button, busyLabel, task) {
+  if (!button || button.disabled) return task();
+  const label = button.dataset.idleLabel || button.textContent.trim();
+  button.dataset.idleLabel = label;
+  setButtonBusy(button, busyLabel);
   try {
     return await task();
   } finally {
-    button.disabled = false;
-    button.textContent = label;
+    clearButtonBusy(button, label);
     renderBangumiSettings();
   }
 }
@@ -82,13 +110,15 @@ export function initializeBangumiSettings() {
   });
 
   loginButton?.addEventListener("click", () => {
-    void withBusy(loginButton, async () => {
+    if (loginButton.disabled) return;
+    setSyncStatus("正在登录并同步…", "busy");
+    void withBusy(loginButton, "登录中", async () => {
       const token = tokenInput?.value?.trim() || getBangumiToken();
       await loginBangumiWithToken(token);
       if (tokenInput) tokenInput.value = "";
+      setSyncStatus(`已同步 · ${formatTime(getBangumiSyncMeta().lastSyncAt)}`, "ok");
     }).catch((error) => {
-      const status = document.querySelector("#bangumiSyncStatus");
-      if (status) status.textContent = String(error?.message || error);
+      setSyncStatus(String(error?.message || error), "error");
     });
   });
 
@@ -98,11 +128,15 @@ export function initializeBangumiSettings() {
   });
 
   syncButton?.addEventListener("click", () => {
-    void withBusy(syncButton, async () => {
+    if (syncButton.disabled) return;
+    setSyncStatus("正在同步观看进度…", "busy");
+    void withBusy(syncButton, "同步中", async () => {
       await syncBangumiHistory({ reason: "manual" });
+      const meta = getBangumiSyncMeta();
+      if (meta.lastError) setSyncStatus(meta.lastError, "error");
+      else setSyncStatus(`已同步 · ${formatTime(meta.lastSyncAt)}`, "ok");
     }).catch((error) => {
-      const status = document.querySelector("#bangumiSyncStatus");
-      if (status) status.textContent = String(error?.message || error);
+      setSyncStatus(String(error?.message || error), "error");
     });
   });
 

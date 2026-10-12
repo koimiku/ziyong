@@ -70,16 +70,46 @@ export async function bangumiRequest(path, { method = "GET", token = "", body, h
 
   if (isAndroidStandalone()) {
     try {
-      return await requestNative(apiPath, { method, headers: finalHeaders, body: payload });
+      return await withTimeout(
+        requestNative(apiPath, { method, headers: finalHeaders, body: payload }),
+        BANGUMI_TIMEOUT_MS
+      );
     } catch (error) {
       console.warn("Bangumi CapacitorHttp failed, fallback fetch:", error);
+      if (error?.name === "TimeoutError") throw error;
     }
   }
 
-  return fetch(apiPath, {
-    method,
-    headers: finalHeaders,
-    body: payload,
-    cache: "no-store",
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BANGUMI_TIMEOUT_MS);
+  try {
+    return await fetch(apiPath, {
+      method,
+      headers: finalHeaders,
+      body: payload,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Bangumi 请求超时，请检查网络后重试");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const BANGUMI_TIMEOUT_MS = 20000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error("Bangumi 请求超时，请检查网络后重试");
+      error.name = "TimeoutError";
+      reject(error);
+    }, ms);
   });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

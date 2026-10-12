@@ -1,4 +1,4 @@
-import { renderEpisodeSourceChips } from "./episode-sources.js";
+import { renderEpisodeSourceChips, sourceOptionLabel } from "./episode-sources.js";
 import { recordWatchProgress } from "./watch-history.js";
 import { escapeHtml } from "./utils.js";
 
@@ -6,7 +6,6 @@ const streamCache = new Map();
 
 export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) {
   const video = document.querySelector("#sourcePlayer");
-  const embed = document.querySelector("#sourceEmbed");
   const playerFrame = document.querySelector("#playerFrame");
   const playStartButton = document.querySelector("#playStartButton");
   const playStartHint = document.querySelector("#playStartHint");
@@ -14,18 +13,15 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   const sourceChips = document.querySelector("#episodeSourceChips");
   const meta = document.querySelector("#sourcePlayerMeta");
   const status = document.querySelector("#sourcePlayerStatus");
-  const openLink = document.querySelector("#sourceOpenLink");
   if (
     !video ||
-    !embed ||
     !playerFrame ||
     !playStartButton ||
     !playStartHint ||
     !episodeTabs ||
     !sourceChips ||
     !meta ||
-    !status ||
-    !openLink
+    !status
   ) {
     return null;
   }
@@ -119,7 +115,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   }
 
   function clearEmbed() {
-    if (!embed.isConnected) return;
+    const embed = document.querySelector("#sourceEmbed");
+    if (!embed?.isConnected) return;
     embed.hidden = true;
     embed.removeAttribute("src");
     embed.src = "about:blank";
@@ -257,20 +254,12 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     setStatus("正在加载视频...");
   }
 
-  function showPlaying(mode = "video") {
+  function showPlaying() {
     playStartButton.hidden = true;
-    playerFrame.classList.remove("is-idle", "is-loading");
-    if (mode === "embed") {
-      video.hidden = true;
-      embed.hidden = false;
-      playerFrame.classList.add("is-embed");
-      stopProgressTracking();
-    } else {
-      clearEmbed();
-      video.hidden = false;
-      playerFrame.classList.remove("is-embed");
-      startProgressTracking();
-    }
+    playerFrame.classList.remove("is-idle", "is-loading", "is-embed");
+    clearEmbed();
+    video.hidden = false;
+    startProgressTracking();
     setStatus("");
   }
 
@@ -285,8 +274,11 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     if (!entry || !source || !playlist || !line || !episode) return;
 
     video.title = `${playlist.sourceName} ${episode.label}`;
-    openLink.href = episode.pageUrl;
     meta.textContent = `${playlist.matchName} · ${line.name} · ${episode.label} · ${source.sourceName}`;
+    const episodeValue = document.querySelector("#episodeDropdownValue");
+    const sourceValue = document.querySelector("#sourceDropdownValue");
+    if (episodeValue) episodeValue.textContent = entry.label;
+    if (sourceValue) sourceValue.textContent = sourceOptionLabel(source);
     if (!playStartHint.classList.contains("is-error")) {
       playStartHint.textContent = `${episode.label} · ${source.sourceName}`;
     }
@@ -294,8 +286,10 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
       episodeCountLabel.textContent = `${episodes.length} 集 · ${entry.sources.length} 源`;
     }
 
-    episodeTabs.querySelectorAll("button").forEach((button, index) => {
-      button.classList.toggle("active", index === state.episodeIndex);
+    episodeTabs.querySelectorAll("[data-episode-index]").forEach((button, index) => {
+      const active = index === state.episodeIndex;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
     });
     sourceChips.innerHTML = renderEpisodeSourceChips(entry, state.sourceIndex);
   }
@@ -379,7 +373,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
         await attachStream(video, stream, state);
         if (requestId !== state.requestId) return;
         document.dispatchEvent(new CustomEvent("anime:source-playback", { detail: { source: candidate.sourceId, ok: true, label: candidate.label } }));
-        showPlaying("video");
+        showPlaying();
         await seekToResume();
         await video.play().catch(() => {});
         saveProgress(true);
@@ -396,24 +390,6 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
 
     for (const candidate of ordered) {
       if (requestId !== state.requestId) return;
-      if (!candidate.pageUrl || candidate.kind === "torrent") continue;
-      applyCandidate(candidate);
-      setStatus(`直链失败，改用原站播放器：${candidate.label}...`);
-
-      try {
-        await attachEmbed(embed, candidate.pageUrl);
-        if (requestId !== state.requestId) return;
-        showPlaying("embed");
-        meta.textContent = `${meta.textContent} · 原站播放器`;
-        return;
-      } catch (error) {
-        lastError = error;
-        console.warn("embed", candidate.label, error);
-      }
-    }
-
-    for (const candidate of ordered) {
-      if (requestId !== state.requestId) return;
       if (candidate.kind !== "torrent") continue;
       applyCandidate(candidate);
       setStatus(`正在尝试 BT：${candidate.label}...`);
@@ -423,7 +399,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
         if (requestId !== state.requestId) return;
         await attachStream(video, stream, state);
         if (requestId !== state.requestId) return;
-        showPlaying("video");
+        showPlaying();
         await video.play().catch(() => {});
         return;
       } catch (error) {
@@ -436,7 +412,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     if (requestId !== state.requestId) return;
     showIdle();
     playStartButton.querySelector("strong").textContent = "重试播放";
-    playStartHint.textContent = lastError?.message || "暂时无法播放，请换片源或原站打开";
+    playStartHint.textContent = lastError?.message || "暂时无法播放，请换一条片源";
     playStartHint.classList.add("is-error");
   }
 
@@ -459,6 +435,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     state.episodeIndex = nextEpisodeIndex;
     state.sourceIndex = nextSourceIndex;
     state.resumePosition = 0;
+    closeOptionDropdowns();
     if (state.started) {
       updateChrome();
       startPlayback();
@@ -472,6 +449,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   function selectSource(nextSourceIndex) {
     state.sourceIndex = nextSourceIndex;
     state.resumePosition = 0;
+    closeOptionDropdowns();
     if (state.started) {
       updateChrome();
       startPlayback();
@@ -513,6 +491,12 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     if (!button) return;
     selectSource(Number(button.dataset.sourceIndex));
   });
+
+  document.querySelectorAll(".option-dropdown").forEach(bindOptionDropdown);
+  if (!document.documentElement.dataset.optionDropdownBound) {
+    document.documentElement.dataset.optionDropdownBound = "1";
+    document.addEventListener("click", () => closeOptionDropdowns());
+  }
 
   stopPlayback();
   updateChrome();
@@ -560,12 +544,6 @@ async function fetchSourcePlay(playApi) {
   if (!response.ok) {
     throw new Error(payload.error || `播放解析失败: ${response.status}`);
   }
-  if (!payload.url && (payload.pageUrl || payload.embedUrl)) {
-    const error = new Error(payload.error || "需要原站嵌入播放");
-    error.pageUrl = payload.pageUrl || payload.embedUrl;
-    error.embedOnly = true;
-    throw error;
-  }
   if (!payload.url) {
     throw new Error(payload.error || "未获取到可播放地址");
   }
@@ -584,7 +562,7 @@ function attachStream(video, stream, state) {
     };
 
     const timer = setTimeout(() => {
-      finish(new Error("视频加载超时，请换片源或原站打开"));
+      finish(new Error("视频加载超时，请换一条片源"));
     }, 20000);
 
     destroyAttachedHls(state);
@@ -632,6 +610,32 @@ function attachStream(video, stream, state) {
   });
 }
 
+function closeOptionDropdowns() {
+  document.querySelectorAll(".option-dropdown.is-open").forEach((root) => {
+    root.classList.remove("is-open");
+    const menu = root.querySelector(".option-dropdown-menu");
+    const trigger = root.querySelector(".option-dropdown-trigger");
+    if (menu) menu.hidden = true;
+    trigger?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindOptionDropdown(root) {
+  const trigger = root.querySelector(".option-dropdown-trigger");
+  const menu = root.querySelector(".option-dropdown-menu");
+  if (!trigger || !menu || trigger.dataset.dropdownBound === "1") return;
+  trigger.dataset.dropdownBound = "1";
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const willOpen = menu.hidden;
+    closeOptionDropdowns();
+    if (!willOpen) return;
+    menu.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    root.classList.add("is-open");
+  });
+}
+
 function destroyAttachedHls(state) {
   if (state?.hls) {
     state.hls.destroy();
@@ -639,36 +643,15 @@ function destroyAttachedHls(state) {
   }
 }
 
-function attachEmbed(iframe, pageUrl) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      iframe.removeEventListener("load", onLoad);
-      iframe.removeEventListener("error", onError);
-      if (error) reject(error);
-      else resolve();
-    };
-
-    const onLoad = () => finish();
-    const onError = () => finish(new Error("原站播放器加载失败"));
-    const timer = setTimeout(() => finish(), 2500);
-
-    iframe.addEventListener("load", onLoad, { once: true });
-    iframe.addEventListener("error", onError, { once: true });
-    iframe.src = pageUrl;
-  });
-}
-
 export function renderEpisodeTabs(episodes, activeIndex) {
   return episodes
     .map(
       (episode, index) => `
         <button
-          class="${index === activeIndex ? "active" : ""}"
+          class="option-dropdown-item${index === activeIndex ? " active" : ""}"
           type="button"
+          role="option"
+          aria-selected="${index === activeIndex ? "true" : "false"}"
           data-episode-index="${index}"
         >
           ${escapeHtml(episode.label)}
