@@ -18,6 +18,7 @@ import { loadCalendarFeed } from "./client/calendar.js";
 import { initializeSearchDialog } from "./client/search-dialog.js";
 import { APP_VERSION, fetchServerInfo, hideServiceWarning, showServiceWarning } from "./client/server-api.js";
 import { state } from "./client/state.js";
+import { enhanceNativeSelects } from "./client/compact-select.js";
 import { initializeTheme, setThemeMode } from "./client/theme.js";
 import { initializeWindowChrome } from "./client/window-chrome.js";
 import { initializeWatchHistory } from "./client/watch-history.js";
@@ -89,6 +90,7 @@ try {
     setThemeMode(themeSelect.value);
   });
 
+  enhanceNativeSelects();
   initializeTheme();
   initializeSearchDialog();
   initializeMediaRows();
