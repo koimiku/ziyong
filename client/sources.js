@@ -4,6 +4,8 @@ import { isTokusatsuItem } from "./tokusatsu.js";
 import { getBestMatchScore, normalizeText, pickDisplayTitle } from "./utils.js";
 
 let miruSources = [];
+let kazumiSources = [];
+let watchSourceRefresh = null;
 
 function sourceMatchesMode(source) {
   const mode = getContentMode();
@@ -13,7 +15,7 @@ function sourceMatchesMode(source) {
 }
 
 export function getWatchSources() {
-  return [...builtinSources, ...miruSources].filter(sourceMatchesMode);
+  return [...builtinSources, ...miruSources, ...kazumiSources].filter(sourceMatchesMode);
 }
 
 export function getSourceNamesText() {
@@ -24,13 +26,27 @@ export function getSourceNamesText() {
 }
 
 export async function refreshWatchSources() {
-  try {
-    const response = await fetch("/api/miru/sources");
-    if (!response.ok) {
-      throw new Error(`Miru sources failed: ${response.status}`);
-    }
-    const payload = await response.json();
-    miruSources = (payload.list || []).map((item) => ({
+  watchSourceRefresh = loadWatchSources().catch((error) => {
+    watchSourceRefresh = null;
+    throw error;
+  });
+  return watchSourceRefresh;
+}
+
+async function loadWatchSources() {
+  const [miruResult, kazumiResult] = await Promise.allSettled([
+    fetch("/api/miru/sources").then(async (response) => {
+      if (!response.ok) throw new Error(`Miru sources failed: ${response.status}`);
+      return response.json();
+    }),
+    fetch("/api/kazumi/sources").then(async (response) => {
+      if (!response.ok) throw new Error(`Kazumi sources failed: ${response.status}`);
+      return response.json();
+    }),
+  ]);
+
+  if (miruResult.status === "fulfilled") {
+    miruSources = (miruResult.value.list || []).map((item) => ({
       id: item.id,
       name: `${item.name} · Miru`,
       kind: "online",
@@ -42,14 +58,34 @@ export async function refreshWatchSources() {
           ? `${String(item.webSite).replace(/\/$/, "")}/?q=${encodeURIComponent(title)}`
           : "#",
     }));
-  } catch (error) {
-    console.warn(error);
+  } else {
+    console.warn(miruResult.reason);
     miruSources = [];
   }
+
+  if (kazumiResult.status === "fulfilled") {
+    kazumiSources = (kazumiResult.value.list || []).map((item) => ({
+      id: item.id,
+      name: `${item.name} · 规则`,
+      kind: "online",
+      kazumi: true,
+      package: item.name,
+      webSite: item.baseUrl || "",
+      searchUrl: (title) =>
+        item.baseUrl
+          ? `${String(item.baseUrl).replace(/\/$/, "")}/?q=${encodeURIComponent(title)}`
+          : "#",
+    }));
+  } else {
+    console.warn(kazumiResult.reason);
+    kazumiSources = [];
+  }
+
   return getWatchSources();
 }
 
 export async function fetchWatchSourceMatches(item) {
+  await (watchSourceRefresh || refreshWatchSources());
   const tokuzillaSlug =
     item.tokuzillaSlug || (String(item.id || "").startsWith("tz:") ? String(item.id).slice(3) : "");
   if (tokuzillaSlug && isTokusatsuItem(item)) {
@@ -176,7 +212,9 @@ export async function loadSourcePlaylists(sourceResults) {
             matchUrl: match.url,
             matchScore: match.matchScore,
             kind: source.kind || "online",
-            speedRank: source.miru
+            speedRank: source.kazumi
+              ? 6
+              : source.miru
               ? 5
               : source.id === "tokuzilla"
                 ? 0
@@ -244,6 +282,48 @@ export async function uninstallMiruExtension(packageName) {
   if (!response.ok) {
     throw new Error(payload.error || `Uninstall failed: ${response.status}`);
   }
+  await refreshWatchSources();
+  return payload;
+}
+
+export async function fetchKazumiRepo() {
+  const response = await fetch("/api/kazumi/repo", { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Kazumi repo failed: ${response.status}`);
+  return payload;
+}
+
+export async function fetchKazumiInstalled() {
+  const response = await fetch("/api/kazumi/installed", { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Kazumi installed failed: ${response.status}`);
+  return payload;
+}
+
+export async function installKazumiRule(name) {
+  const response = await fetch(`/api/kazumi/install?name=${encodeURIComponent(name)}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `安装失败: ${response.status}`);
+  await refreshWatchSources();
+  return payload;
+}
+
+export async function importKazumiRule(body) {
+  const response = await fetch("/api/kazumi/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `导入失败: ${response.status}`);
+  await refreshWatchSources();
+  return payload;
+}
+
+export async function uninstallKazumiRule(name) {
+  const response = await fetch(`/api/kazumi/uninstall?name=${encodeURIComponent(name)}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `移除失败: ${response.status}`);
   await refreshWatchSources();
   return payload;
 }

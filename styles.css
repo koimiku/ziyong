@@ -1229,6 +1229,35 @@ body.search-dialog-open {
   color: #2563eb;
 }
 
+.source-card-mark--kazumi {
+  background: rgba(13, 148, 136, 0.14);
+  color: #0f766e;
+}
+
+.kazumi-import {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.kazumi-import input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line, rgba(15, 23, 42, 0.12));
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.kazumi-import-status {
+  min-height: 1.2em;
+  margin: 6px 0 12px;
+  color: var(--muted, #667085);
+  font-size: 13px;
+}
+
 .source-card-body {
   display: grid;
   gap: 4px;

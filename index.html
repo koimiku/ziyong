@@ -321,7 +321,7 @@
           </div>
           <div class="settings-card notice">
             <h3>资源说明</h3>
-            <p>内置在线片源优先；也可安装 Miru 官方仓库扩展作为额外视频源。BT 类扩展暂不支持。</p>
+            <p>内置在线片源优先；也可安装 Miru 扩展或 Kazumi 规则作为额外视频源。BT 类扩展暂不支持。</p>
           </div>
         </section>
 
@@ -330,7 +330,7 @@
             <div class="sources-page-intro">
               <p class="eyebrow">Anime</p>
               <h2>片源</h2>
-              <p class="sources-page-desc">内置在线源与 Miru 扩展，播放番剧时自动匹配可用线路。</p>
+              <p class="sources-page-desc">内置在线源、Miru 扩展和 Kazumi 规则，播放番剧时自动匹配可用线路。</p>
             </div>
             <div class="sources-page-actions">
               <button class="ghost-button" id="miruHealthButton" type="button">立即检测</button>
@@ -342,6 +342,11 @@
             <label class="health-auto-toggle"><input id="sourceHealthAuto" type="checkbox" checked />自动检测 · 每 10 分钟</label>
           </div>
           <p class="sources-health-note">检查搜索接口是否正常；连续异常会标记为暂不可用。单集是否可播放仍以实际播放结果为准。</p>
+          <form class="kazumi-import" id="kazumiImportForm">
+            <input id="kazumiImportInput" type="text" placeholder="规则名、规则 JSON 链接，或粘贴整段 JSON" autocomplete="off" enterkeyhint="done" />
+            <button class="small-button" type="submit">导入规则</button>
+          </form>
+          <p class="kazumi-import-status" id="kazumiImportStatus"></p>
           <p class="miru-status" id="miruStatus">正在连接官方仓库...</p>
           <div class="miru-extension-list" id="miruExtensionList"></div>
         </section>

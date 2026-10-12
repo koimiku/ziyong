@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { browserHeaders } from "./config.mjs";
+import { BANGUMI_APP_USER_AGENT } from "./bangumi-gateway.mjs";
 import { writeJson } from "./utils.mjs";
 
 const CALENDAR_URL = "https://api.bgm.tv/calendar";
@@ -59,16 +59,15 @@ function saveDiskCache(days) {
 async function fetchCalendarOnce(signal) {
   const response = await fetch(CALENDAR_URL, {
     headers: {
-      ...browserHeaders,
       Accept: "application/json",
-      Referer: "https://bgm.tv/",
-      Origin: "https://bgm.tv",
+      "User-Agent": BANGUMI_APP_USER_AGENT,
     },
     signal,
   });
 
   if (!response.ok) {
-    throw new Error(`Bangumi calendar failed: ${response.status}`);
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Bangumi calendar failed: ${response.status}${detail ? ` ${detail.slice(0, 160)}` : ""}`);
   }
 
   const payload = await response.json();

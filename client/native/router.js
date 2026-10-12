@@ -10,6 +10,7 @@ import { watchSources } from "./shared.js";
 import { APP_VERSION } from "../version.js";
 import { DEFAULT_MIRU_REPO, parseMiruSourceId } from "./miru/config.js";
 import {
+  buildStreamPayload,
   detailMiru,
   resolveMiruPlay,
   searchMiru,
@@ -24,6 +25,20 @@ import {
   listInstalledMeta,
   uninstallExtension,
 } from "./miru/repo.js";
+import { parseKazumiSourceId } from "../kazumi/engine.js";
+import {
+  detailKazumi,
+  ensureKazumiReady,
+  fetchKazumiIndex,
+  getKazumiRule,
+  importKazumiRule,
+  installKazumiRule,
+  listKazumiRules,
+  listKazumiSources,
+  resolveKazumiPlay,
+  searchKazumi,
+  uninstallKazumiRule,
+} from "./kazumi/store.js";
 
 const BANGUMI_CALENDAR = "https://api.bgm.tv/calendar";
 const HEALTH_QUERY = "海贼王";
@@ -40,14 +55,29 @@ function jsonResponse(payload, status = 200) {
 }
 
 async function handleBangumiCalendar() {
-  const upstream = await fetch(BANGUMI_CALENDAR, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "anime-android/1.3 (standalone)",
-    },
-  });
-  if (!upstream.ok) throw new Error(`Bangumi calendar failed: ${upstream.status}`);
-  const days = await upstream.json();
+  const headers = {
+    Accept: "application/json",
+    "User-Agent": `ziyong/${APP_VERSION} (https://github.com/koimiku/ziyong)`,
+  };
+  const Http = window.Capacitor?.Plugins?.CapacitorHttp;
+  let days;
+  if (Http?.request) {
+    const response = await Http.request({ url: BANGUMI_CALENDAR, method: "GET", headers });
+    const status = Number(response?.status || 0);
+    const raw = response?.data;
+    if (status < 200 || status >= 300) {
+      const detail = typeof raw === "string" ? raw : JSON.stringify(raw ?? "");
+      throw new Error(`Bangumi calendar failed: ${status} ${detail.slice(0, 160)}`);
+    }
+    days = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } else {
+    const upstream = await fetch(BANGUMI_CALENDAR, { headers });
+    if (!upstream.ok) {
+      const detail = await upstream.text().catch(() => "");
+      throw new Error(`Bangumi calendar failed: ${upstream.status}${detail ? ` ${detail.slice(0, 160)}` : ""}`);
+    }
+    days = await upstream.json();
+  }
   if (!Array.isArray(days) || !days.length) {
     throw new Error("Bangumi calendar returned empty data");
   }
@@ -65,6 +95,14 @@ async function handleSourceSearch(url) {
     if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
     const list = await searchMiru(miruPackage, query);
     return jsonResponse({ source: sourceId, name: getMeta(miruPackage)?.name, list });
+  }
+
+  const kazumiName = parseKazumiSourceId(sourceId);
+  if (kazumiName) {
+    await ensureKazumiReady();
+    if (!getKazumiRule(kazumiName)) return jsonResponse({ error: "Unknown Kazumi rule" }, 404);
+    const list = await searchKazumi(kazumiName, query);
+    return jsonResponse({ source: sourceId, name: getKazumiRule(kazumiName)?.name || kazumiName, list });
   }
 
   const source = watchSources[sourceId];
@@ -88,6 +126,13 @@ async function handleSourceDetail(url) {
     await ensureMiruReady();
     if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
     return jsonResponse(await detailMiru(miruPackage, id));
+  }
+
+  const kazumiName = parseKazumiSourceId(sourceId);
+  if (kazumiName) {
+    await ensureKazumiReady();
+    if (!getKazumiRule(kazumiName)) return jsonResponse({ error: "Unknown Kazumi rule" }, 404);
+    return jsonResponse(await detailKazumi(kazumiName, id));
   }
 
   const source = watchSources[sourceId];
@@ -117,6 +162,19 @@ async function handleSourcePlay(url) {
     try {
       const stream = await resolveMiruPlay(miruPackage, watch, page);
       return jsonResponse(stream);
+    } catch (error) {
+      return jsonResponse({ error: String(error?.message || error) }, 502);
+    }
+  }
+
+  const kazumiName = parseKazumiSourceId(sourceId);
+  if (kazumiName) {
+    if (!watch) return jsonResponse({ error: "Missing watch url" }, 400);
+    await ensureKazumiReady();
+    if (!getKazumiRule(kazumiName)) return jsonResponse({ error: "Unknown Kazumi rule" }, 404);
+    try {
+      const found = await resolveKazumiPlay(kazumiName, watch);
+      return jsonResponse(buildStreamPayload(found.mediaUrl, found.pageUrl, found.headers));
     } catch (error) {
       return jsonResponse({ error: String(error?.message || error) }, 502);
     }
@@ -208,6 +266,49 @@ async function handleMiruUninstall(url) {
   return jsonResponse({ ok: true, sources: getInstalledSources() });
 }
 
+async function handleKazumiRepo() {
+  await ensureKazumiReady();
+  const installed = new Set(listKazumiRules().map((item) => item.name));
+  const list = (await fetchKazumiIndex()).map((item) => ({
+    ...item,
+    installed: installed.has(item.name),
+  }));
+  return jsonResponse({ list });
+}
+
+async function handleKazumiInstalled() {
+  await ensureKazumiReady();
+  return jsonResponse({ list: listKazumiRules() });
+}
+
+async function handleKazumiSources() {
+  await ensureKazumiReady();
+  return jsonResponse({ list: listKazumiSources() });
+}
+
+async function handleKazumiInstall(url) {
+  const name = String(url.searchParams.get("name") || "").trim();
+  if (!name) return jsonResponse({ error: "Missing rule name" }, 400);
+  await ensureKazumiReady();
+  const rule = await installKazumiRule(name);
+  return jsonResponse({ ok: true, rule, sources: listKazumiSources() });
+}
+
+async function handleKazumiImport(request) {
+  const payload = await request.json().catch(() => ({}));
+  await ensureKazumiReady();
+  const rule = await importKazumiRule(payload);
+  return jsonResponse({ ok: true, rule, sources: listKazumiSources() });
+}
+
+async function handleKazumiUninstall(url) {
+  const name = String(url.searchParams.get("name") || "").trim();
+  if (!name) return jsonResponse({ error: "Missing rule name" }, 400);
+  await ensureKazumiReady();
+  uninstallKazumiRule(name);
+  return jsonResponse({ ok: true, sources: listKazumiSources() });
+}
+
 async function withTimeout(promise, ms) {
   let timer;
   try {
@@ -225,6 +326,14 @@ async function withTimeout(promise, ms) {
 async function probeSourceHealth(sourceId) {
   return withTimeout(
     (async () => {
+      const kazumiName = parseKazumiSourceId(sourceId);
+      if (kazumiName) {
+        await ensureKazumiReady();
+        if (!getKazumiRule(kazumiName)) throw new Error("规则未安装");
+        const list = await searchKazumi(kazumiName, HEALTH_QUERY);
+        return Array.isArray(list) && list.length > 0;
+      }
+
       const miruPackage = parseMiruSourceId(sourceId);
       if (miruPackage) {
         await ensureMiruReady();
@@ -258,8 +367,11 @@ async function handleSourceHealth(url) {
 }
 
 async function handleSourcesHealth(url) {
+  await ensureMiruReady().catch(() => {});
+  await ensureKazumiReady().catch(() => {});
   const ids = Object.entries(watchSources).filter(([, source]) => source.kind === "online").map(([id]) => id);
   ids.push(...listInstalledMeta().filter(meta => meta.type === "bangumi").map(meta => 'miru:' + meta.package));
+  ids.push(...listKazumiSources().map(item => item.id));
   return jsonResponse({ list: await healthMonitor.checkAll(ids, { force: url?.searchParams.get("force") === "1" }) });
 }
 
@@ -292,6 +404,13 @@ export async function handleNativeApi(input, init = {}) {
     if (path === "/api/miru/sources") return handleMiruSources();
     if (path === "/api/miru/install") return handleMiruInstall(url);
     if (path === "/api/miru/uninstall") return handleMiruUninstall(url);
+
+    if (path === "/api/kazumi/repo") return handleKazumiRepo();
+    if (path === "/api/kazumi/installed") return handleKazumiInstalled();
+    if (path === "/api/kazumi/sources") return handleKazumiSources();
+    if (path === "/api/kazumi/install") return handleKazumiInstall(url);
+    if (path === "/api/kazumi/import") return handleKazumiImport(request);
+    if (path === "/api/kazumi/uninstall") return handleKazumiUninstall(url);
 
     if (path === "/api/sources-health") return handleSourcesHealth(url);
     if (path === "/api/source-health") return handleSourceHealth(url);

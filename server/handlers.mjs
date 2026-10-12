@@ -2,7 +2,7 @@ import { createHealthMonitor } from "../client/health-monitor.js";
 import { browserHeaders, watchSources } from "./config.mjs";
 import { getRuntime, listInstalledMeta } from "./miru/repo.mjs";
 import { getCache, setCache } from "./cache.mjs";
-import { writeJson } from "./utils.mjs";
+import { buildStreamPayload, writeJson } from "./utils.mjs";
 import {
   parseMaccmsLines,
   preferDirectMaccmsLines,
@@ -17,6 +17,15 @@ import {
 import { parseMiruSourceId } from "./miru/config.mjs";
 import { detailMiru, resolveMiruPlay, searchMiru } from "./miru/adapter.mjs";
 import { getMeta } from "./miru/repo.mjs";
+import { parseKazumiSourceId } from "../client/kazumi/engine.js";
+import {
+  detailKazumi,
+  ensureKazumiReady,
+  getKazumiRule,
+  listKazumiSources,
+  resolveKazumiPlay,
+  searchKazumi,
+} from "./kazumi/store.mjs";
 import {
   detailTokuzilla,
   fetchTokuzillaLatest,
@@ -37,15 +46,19 @@ export async function handleSourceSearch(url, response) {
   const sourceId = String(url.searchParams.get("source") || "");
   const query = String(url.searchParams.get("q") || "").trim();
   const miruPackage = parseMiruSourceId(sourceId);
-  const source = miruPackage ? getMeta(miruPackage) : watchSources[sourceId];
+  const kazumiName = parseKazumiSourceId(sourceId);
+  const source = miruPackage ? getMeta(miruPackage) : kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
 
-  if (!source || !query) {
+  if ((!source && !kazumiName) || !query) {
     writeJson(response, 400, { error: "Missing source or query" });
     return;
   }
 
   try {
-    const list = miruPackage
+    if (kazumiName) await ensureKazumiReady();
+    const list = kazumiName
+      ? await searchKazumi(kazumiName, query)
+      : miruPackage
       ? await searchMiru(miruPackage, query)
       : source.type === "tokuzilla"
         ? await searchTokuzilla(query)
@@ -57,7 +70,7 @@ export async function handleSourceSearch(url, response) {
 
     writeJson(response, 200, {
       source: sourceId,
-      name: source.name,
+      name: kazumiName ? getKazumiRule(kazumiName)?.name || kazumiName : source.name,
       list,
     });
   } catch (error) {
@@ -69,9 +82,10 @@ export async function handleSourceDetail(url, response) {
   const sourceId = String(url.searchParams.get("source") || "");
   const id = String(url.searchParams.get("id") || "").trim();
   const miruPackage = parseMiruSourceId(sourceId);
-  const source = miruPackage ? getMeta(miruPackage) : watchSources[sourceId];
+  const kazumiName = parseKazumiSourceId(sourceId);
+  const source = miruPackage ? getMeta(miruPackage) : kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
 
-  if (!source || !id) {
+  if ((!source && !kazumiName) || !id) {
     writeJson(response, 400, { error: "Missing source or id" });
     return;
   }
@@ -85,7 +99,10 @@ export async function handleSourceDetail(url, response) {
 
   try {
     let payload;
-    if (miruPackage) {
+    if (kazumiName) {
+      await ensureKazumiReady();
+      payload = await detailKazumi(kazumiName, id);
+    } else if (miruPackage) {
       payload = await detailMiru(miruPackage, id);
     } else if (source.type === "tokuzilla") {
       payload = await detailTokuzilla(id);
@@ -135,7 +152,8 @@ export async function handleSourcePlay(url, response) {
   const sourceId = String(url.searchParams.get("source") || "");
   const id = String(url.searchParams.get("id") || "").trim();
   const miruPackage = parseMiruSourceId(sourceId);
-  const source = miruPackage ? getMeta(miruPackage) : watchSources[sourceId];
+  const kazumiName = parseKazumiSourceId(sourceId);
+  const source = miruPackage ? getMeta(miruPackage) : kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
   const chapter = String(url.searchParams.get("chapter") || "");
   const torrent = String(url.searchParams.get("torrent") || "");
   const page = String(url.searchParams.get("page") || "");
@@ -144,28 +162,28 @@ export async function handleSourcePlay(url, response) {
   const sid = Number(url.searchParams.get("sid") || 1);
   const nid = Number(url.searchParams.get("nid") || 1);
 
-  if (!source) {
+  if (!source && !kazumiName) {
     writeJson(response, 400, { error: "Missing source" });
     return;
   }
-  if (miruPackage && !watch) {
+  if ((miruPackage || kazumiName) && !watch) {
     writeJson(response, 400, { error: "Missing watch url" });
     return;
   }
-  if (!miruPackage && source.type === "mikan" && !torrent) {
+  if (!miruPackage && !kazumiName && source.type === "mikan" && !torrent) {
     writeJson(response, 400, { error: "Missing torrent" });
     return;
   }
-  if (!miruPackage && source.type !== "mikan" && source.type !== "tokuzilla" && !id) {
+  if (!miruPackage && !kazumiName && source.type !== "mikan" && source.type !== "tokuzilla" && !id) {
     writeJson(response, 400, { error: "Missing source or id" });
     return;
   }
-  if (!miruPackage && source.type === "tokuzilla" && !id) {
+  if (!miruPackage && !kazumiName && source.type === "tokuzilla" && !id) {
     writeJson(response, 400, { error: "Missing tokuzilla slug" });
     return;
   }
 
-  const cacheKey = miruPackage
+  const cacheKey = miruPackage || kazumiName
     ? `play:${sourceId}:${watch}`
     : source.type === "tokuzilla"
       ? `play:${sourceId}:${id}:${ep || 1}`
@@ -182,7 +200,13 @@ export async function handleSourcePlay(url, response) {
   }
 
   try {
-    const stream = miruPackage
+    const stream = kazumiName
+      ? await (async () => {
+          await ensureKazumiReady();
+          const found = await resolveKazumiPlay(kazumiName, watch);
+          return buildStreamPayload(found.mediaUrl, found.pageUrl, found.headers);
+        })()
+      : miruPackage
       ? await resolveMiruPlay(miruPackage, watch, page)
       : source.type === "tokuzilla"
         ? await resolveTokuzillaStream(id, ep || 1)
@@ -209,7 +233,9 @@ const healthMonitor = createHealthMonitor(probeSourceHealth);
 
 export async function handleSourceHealth(url, response) {
   const sourceId = String(url.searchParams.get("source") || "").trim();
-  if (!watchSources[sourceId] && !getMeta(parseMiruSourceId(sourceId))) {
+  const kazumiName = parseKazumiSourceId(sourceId);
+  if (kazumiName) await ensureKazumiReady();
+  if (!watchSources[sourceId] && !getMeta(parseMiruSourceId(sourceId)) && !getKazumiRule(kazumiName)) {
     writeJson(response, 400, { error: "未知片源" });
     return;
   }
@@ -234,13 +260,23 @@ export async function handleSourcesHealth(_url, response) {
     .filter((meta) => meta.type === "bangumi")
     .map((meta) => `miru:${meta.package}`);
 
-  const sourceIds = [...builtin, ...installedMiru];
+  await ensureKazumiReady().catch(() => {});
+  const installedKazumi = listKazumiSources().map((item) => item.id);
+  const sourceIds = [...builtin, ...installedMiru, ...installedKazumi];
   const results = await healthMonitor.checkAll(sourceIds, { force: _url.searchParams.get("force") === "1" });
 
   writeJson(response, 200, { list: results });
 }
 
 async function probeSourceHealth(sourceId) {
+  const kazumiName = parseKazumiSourceId(sourceId);
+  if (kazumiName) {
+    await ensureKazumiReady();
+    if (!getKazumiRule(kazumiName)) throw new Error("规则未安装");
+    const list = await searchKazumi(kazumiName, HEALTH_QUERY);
+    return Array.isArray(list) && list.length > 0;
+  }
+
   const miruPackage = parseMiruSourceId(sourceId);
   if (miruPackage) {
     if (!getRuntime(miruPackage)) {

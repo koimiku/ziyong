@@ -1,4 +1,5 @@
-import { BANGUMI_API_BASE, fallbackAnime } from "./config.js";
+import { fallbackAnime } from "./config.js";
+import { bangumiRequest } from "./bangumi-http.js";
 import { getBestMatchScore } from "./utils.js";
 
 export function getQueryCandidates(query, localMatches) {
@@ -9,22 +10,19 @@ export function getQueryCandidates(query, localMatches) {
 }
 
 export async function fetchAnimeSearch(query) {
-  const response = await fetch(`${BANGUMI_API_BASE}/search/subjects`, {
+  const response = await bangumiRequest("/v0/search/subjects", {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+    body: {
       keyword: query,
       sort: "match",
       filter: {
         type: [2],
       },
-    }),
+    },
   });
   if (!response.ok) {
-    throw new Error(`Search failed: ${response.status}`);
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Search failed: ${response.status}${detail ? ` ${detail.slice(0, 160)}` : ""}`);
   }
   const payload = await response.json();
   return (payload.data || []).map(normalizeBangumiSubject);

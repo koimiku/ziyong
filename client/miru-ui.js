@@ -1,9 +1,14 @@
 import {
+  fetchKazumiInstalled,
+  fetchKazumiRepo,
   fetchMiruInstalled,
   fetchMiruRepo,
   fetchSourceHealth,
+  importKazumiRule,
+  installKazumiRule,
   installMiruExtension,
   refreshWatchSources,
+  uninstallKazumiRule,
   uninstallMiruExtension,
 } from "./sources.js";
 import { onlineSources } from "./config.js";
@@ -52,6 +57,12 @@ export async function initializeMiruPanel() {
       const stackEl = listEl.querySelector("#sourcesPageStack");
 
       renderBuiltinSources(stackEl);
+      if (!isTokusatsuMode()) {
+        await renderKazumiSection(stackEl, {
+          includeCatalog: !document.querySelector("#miruView")?.hidden,
+        });
+      }
+      document.querySelector("#kazumiImportForm")?.toggleAttribute("hidden", isTokusatsuMode());
       applyHealthResults(listEl);
       runHealthChecks(listEl);
 
@@ -160,6 +171,44 @@ export async function initializeMiruPanel() {
     }
   });
 
+  listEl.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-kazumi-name]");
+    if (!button || button.disabled) return;
+    event.preventDefault();
+    const name = button.dataset.kazumiName;
+    const action = button.dataset.kazumiAction;
+    setActionButtonBusy(button, action === "install" ? "安装中" : "移除中");
+    try {
+      if (action === "install") await installKazumiRule(name);
+      else await uninstallKazumiRule(name);
+      await render({ preserveScroll: true, silent: true });
+    } catch (error) {
+      console.warn(error);
+      statusEl.textContent = error.message || "规则操作失败";
+      resetActionButton(button, action === "install" ? "安装" : "移除");
+    }
+  });
+
+  document.querySelector("#kazumiImportForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = document.querySelector("#kazumiImportInput");
+    const importStatus = document.querySelector("#kazumiImportStatus");
+    const raw = input?.value.trim() || "";
+    if (!raw) return;
+    if (importStatus) importStatus.textContent = "正在导入规则...";
+    try {
+      if (raw.startsWith("{")) await importKazumiRule({ json: raw });
+      else if (/^https?:\/\//i.test(raw)) await importKazumiRule({ url: raw });
+      else await installKazumiRule(raw);
+      if (input) input.value = "";
+      if (importStatus) importStatus.textContent = "规则已导入，播放时会自动参与匹配。";
+      await render({ preserveScroll: true, silent: true });
+    } catch (error) {
+      console.warn(error);
+      if (importStatus) importStatus.textContent = error.message || "导入失败";
+    }
+  });
+
   refreshButton?.addEventListener("click", () => {
     render({ preserveScroll: true, silent: true });
   });
@@ -229,6 +278,72 @@ function renderBuiltinSources(container) {
   container.append(section);
 }
 
+async function renderKazumiSection(container, { includeCatalog = true } = {}) {
+  if (!container) return;
+  const section = document.createElement("section");
+  section.className = "miru-type-section sources-panel";
+
+  let repoItems = [];
+  let installed = [];
+  let repoError = "";
+  try {
+    const [repo, local] = await Promise.all([
+      includeCatalog
+        ? fetchKazumiRepo().catch((error) => {
+            repoError = error.message || "连接失败";
+            return { list: [] };
+          })
+        : Promise.resolve({ list: [] }),
+      fetchKazumiInstalled().catch(() => ({ list: [] })),
+    ]);
+    repoItems = repo.list || [];
+    installed = local.list || [];
+  } catch (error) {
+    repoError = error.message || "连接失败";
+  }
+
+  const installedNames = new Set(installed.map((item) => item.name));
+  const catalog = new Map();
+  for (const item of repoItems) catalog.set(item.name, item);
+  for (const item of installed) {
+    if (!catalog.has(item.name)) catalog.set(item.name, { ...item, installed: true });
+  }
+  const items = [...catalog.values()];
+
+  section.innerHTML = `
+    <div class="miru-type-head">
+      <h4>Kazumi 规则</h4>
+      <span class="miru-type-meta">${items.length} 个${repoError ? " · 索引暂不可用" : ""}</span>
+    </div>
+    <p class="sources-panel-tip">安装 KazumiRules 里的 JSON 规则。搜索和选集按规则执行，播放页能取出直链时才在本机播放。</p>
+    <div class="sources-card-grid"></div>
+  `;
+  const grid = section.querySelector(".sources-card-grid");
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "inline-empty";
+    empty.textContent = repoError
+      ? `规则索引暂时不可用（${repoError}）。可以在上方输入规则名或 JSON 导入。`
+      : "暂无规则。在上方输入规则名、规则链接，或粘贴 JSON。";
+    section.append(empty);
+  }
+  items.forEach((item) => {
+    const isInstalled = installedNames.has(item.name) || item.installed;
+    grid.append(
+      createSourceCard({
+        name: item.name,
+        package: item.name,
+        type: "kazumi",
+        kazumi: true,
+        installed: isInstalled,
+        healthTarget: isInstalled ? `kazumi:${item.name}` : "",
+        hint: item.version ? `v${item.version}` : "规则",
+      })
+    );
+  });
+  container.append(section);
+}
+
 function renderGroupedExtensions(items, container, installedPackages, allInstalled = false) {
   if (!container) return;
 
@@ -290,7 +405,7 @@ function createSourceCard(item) {
   card.className = "source-card";
   card.dataset.healthTarget = item.healthTarget || "";
 
-  const canInstall = item.type === "bangumi" || item.type === "builtin";
+  const canInstall = item.type === "bangumi" || item.type === "builtin" || item.type === "kazumi";
   const action = item.installed ? "uninstall" : "install";
   const actionLabel = item.type === "builtin"
     ? "内置"
@@ -340,8 +455,13 @@ function createSourceCard(item) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "small-button";
-    button.dataset.package = item.package || "";
-    button.dataset.action = action;
+    if (item.kazumi) {
+      button.dataset.kazumiName = item.package || "";
+      button.dataset.kazumiAction = action;
+    } else {
+      button.dataset.package = item.package || "";
+      button.dataset.action = action;
+    }
     if (!canInstall || item.disableInstall) button.disabled = true;
     button.textContent = actionLabel;
     foot.append(button);
@@ -498,6 +618,7 @@ function resolveSourceIconKey(item) {
   if (item.type === "builtin") return "builtin";
   if (item.type === "bt") return "bt";
   if (item.type === "manga") return "manga";
+  if (item.kazumi || item.type === "kazumi" || id.startsWith("kazumi:")) return "kazumi";
   if (item.type === "bangumi" || id.startsWith("miru:")) return "miru";
   return "default";
 }
@@ -508,6 +629,7 @@ function sourceIconSvg(key) {
     gugu: `<svg viewBox="0 0 24 24" fill="none"><path d="M6.5 16.5c2.2 1.6 4.3 2.3 5.5 2.3s3.3-.7 5.5-2.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="10.5" r="1.2" fill="currentColor"/><circle cx="15" cy="10.5" r="1.2" fill="currentColor"/><path d="M7 8.2C8.2 6.4 10 5.4 12 5.4s3.8 1 5 2.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
     omofun: `<svg viewBox="0 0 24 24" fill="none"><path d="M4.5 8.5 12 4.8l7.5 3.7v6.9L12 19.2 4.5 15.4V8.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 8.2v7.5M8.8 10.2 15.2 13.6M15.2 10.2 8.8 13.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
     tokusatsu: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.8 19 7v5.4c0 4.1-2.8 7.5-7 8.8-4.2-1.3-7-4.7-7-8.8V7l7-3.2Z" stroke="currentColor" stroke-width="1.7"/><path d="M9.2 12.2 11 14l3.8-4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    kazumi: `<svg viewBox="0 0 24 24" fill="none"><path d="M7 6.5h10v11H7v-11Z" stroke="currentColor" stroke-width="1.7"/><path d="M9.5 10.2h5M9.5 13.4h3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
     miru: `<svg viewBox="0 0 24 24" fill="none"><path d="M8 4.8h3.2L12 7l.8-2.2H16v3.2L18.2 9 16 10.8v3.2h-3.2L12 16.2 11.2 14H8v-3.2L5.8 9 8 7.2V4.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
     manga: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 5.5h5.2c1.4 0 2.3.8 2.8 1.5.5-.7 1.4-1.5 2.8-1.5H22v13h-5.2c-1.4 0-2.3.5-2.8 1.1-.5-.6-1.4-1.1-2.8-1.1H6v-13Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
     bt: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 4.5v9.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m8.8 10.2 3.2 3.5 3.2-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.2 16.8h11.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,

@@ -6,6 +6,7 @@ miru-app-dev/
 data/watch-history.json
 data/bangumi-calendar.json
 data/miru/extensions/
+data/kazumi/
 android/.gradle/
 android/app/build/
 android/build/

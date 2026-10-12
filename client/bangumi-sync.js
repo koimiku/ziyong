@@ -11,6 +11,9 @@ const META_KEY = "anime-bangumi-sync-meta";
 
 const COLLECTION_DOING = 3;
 const COLLECTION_COLLECT = 2;
+const EPISODE_WATCHED = 2;
+const EPISODE_PAGE = 100;
+const EPISODE_BATCH = 80;
 
 let syncTimer = null;
 let syncing = false;
@@ -108,7 +111,8 @@ async function fetchAllCollections(token, username) {
       { token }
     );
     if (!response.ok) {
-      throw new Error(`拉取收藏失败 (${response.status})`);
+      const detail = await readErrorDetail(response);
+      throw new Error(`拉取收藏失败 (${response.status})${detail ? `：${detail}` : ""}`);
     }
     const payload = await response.json();
     const chunk = Array.isArray(payload?.data) ? payload.data : [];
@@ -161,39 +165,82 @@ function collectionToHistoryEntry(row) {
   };
 }
 
-async function pushSubjectProgress(token, subjectId, episodeNumber, { finished = false } = {}) {
-  if (!subjectId || !episodeNumber || episodeNumber < 1) return;
+async function readErrorDetail(response) {
+  const text = await response.text().catch(() => "");
+  if (!text) return "";
+  try {
+    const payload = JSON.parse(text);
+    return String(payload.description || payload.title || text).slice(0, 160);
+  } catch {
+    return text.slice(0, 160);
+  }
+}
 
-  const type = finished ? COLLECTION_COLLECT : COLLECTION_DOING;
-  const body = {
-    type,
-    ep_status: episodeNumber,
-  };
-
+async function ensureAnimeCollection(token, subjectId, finished) {
   const response = await bangumiRequest(`/v0/users/-/collections/${subjectId}`, {
     method: "POST",
     token,
-    body,
+    body: { type: finished ? COLLECTION_COLLECT : COLLECTION_DOING },
   });
+  if (response.ok || response.status === 204) return;
+  const detail = await readErrorDetail(response);
+  throw new Error(`同步收藏状态失败 (${response.status})${detail ? `：${detail}` : ""}`);
+}
 
-  if (response.status === 404 || response.status === 400) {
-    // Some accounts need POST create then PATCH; try PATCH as fallback.
-    const patch = await bangumiRequest(`/v0/users/-/collections/${subjectId}`, {
+async function listMainEpisodeIds(token, subjectId, upToEpisode) {
+  const ids = [];
+  let offset = 0;
+
+  for (let page = 0; page < 30; page += 1) {
+    const response = await bangumiRequest(
+      `/v0/episodes?subject_id=${subjectId}&type=0&limit=${EPISODE_PAGE}&offset=${offset}`,
+      { token }
+    );
+    if (!response.ok) {
+      const detail = await readErrorDetail(response);
+      throw new Error(`读取章节失败 (${response.status})${detail ? `：${detail}` : ""}`);
+    }
+    const payload = await response.json();
+    const chunk = Array.isArray(payload?.data) ? payload.data : [];
+    for (const episode of chunk) {
+      const number = Number(episode?.ep ?? episode?.sort);
+      const id = Number(episode?.id);
+      if (!Number.isFinite(number) || number < 1 || number > upToEpisode || !(id > 0)) continue;
+      ids.push(id);
+    }
+    const total = Number(payload?.total);
+    offset += chunk.length;
+    if (!chunk.length || chunk.length < EPISODE_PAGE || (Number.isFinite(total) && offset >= total)) break;
+  }
+
+  return ids;
+}
+
+async function markEpisodesWatched(token, subjectId, episodeIds) {
+  for (let index = 0; index < episodeIds.length; index += EPISODE_BATCH) {
+    const response = await bangumiRequest(`/v0/users/-/collections/${subjectId}/episodes`, {
       method: "PATCH",
       token,
-      body,
+      body: {
+        episode_id: episodeIds.slice(index, index + EPISODE_BATCH),
+        type: EPISODE_WATCHED,
+      },
     });
-    if (!patch.ok && patch.status !== 204) {
-      const detail = await patch.text().catch(() => "");
-      throw new Error(`同步进度失败 (${patch.status}) ${detail.slice(0, 80)}`);
+    if (!response.ok && response.status !== 204) {
+      const detail = await readErrorDetail(response);
+      throw new Error(`同步进度失败 (${response.status})${detail ? `：${detail}` : ""}`);
     }
-    return;
   }
+}
 
-  if (!response.ok && response.status !== 204) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`同步进度失败 (${response.status}) ${detail.slice(0, 80)}`);
-  }
+async function pushSubjectProgress(token, subjectId, episodeNumber, { finished = false } = {}) {
+  if (!subjectId || !episodeNumber || episodeNumber < 1) return;
+
+  // Anime progress is stored on each episode. ep_status is only accepted for books.
+  await ensureAnimeCollection(token, subjectId, finished);
+  const episodeIds = await listMainEpisodeIds(token, subjectId, episodeNumber);
+  if (!episodeIds.length) return;
+  await markEpisodesWatched(token, subjectId, episodeIds);
 }
 
 export async function syncBangumiHistory({ reason = "manual" } = {}) {
