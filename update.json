@@ -1,7 +1,7 @@
 {
-  "version": "1.4.6",
-  "name": "v1.4.6",
-  "notes": "片源改用 Kazumi 规则并内置常用规则；打开番剧时逐个检索片源并可重试；直链失败时用隐藏网页截获视频地址；加入 Kazumi 风格动画；修复手机端长番名撑宽页面。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.6",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.6/app-release.apk"
+  "version": "1.4.7",
+  "name": "v1.4.7",
+  "notes": "观看流程改成 Kazumi 式：自己选片源和搜索结果，播放页独立全屏，失败可重试或更换片源；网站要求验证时提示并可一键去验证；更新弹窗改为左取消右下载；修复部分规则无法检索。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.7",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.7/app-release.apk"
 }
