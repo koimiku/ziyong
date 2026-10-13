@@ -8,7 +8,7 @@ import {
 } from "./tokuzilla.js";
 import { buildStreamPayload, watchSources } from "./shared.js";
 import { APP_VERSION } from "../version.js";
-import { parseKazumiSourceId, rulePlayPageUrl, rulePlayReferer } from "../kazumi/engine.js";
+import { errorPayload, parseKazumiSourceId, rulePlayPageUrl, rulePlayReferer } from "../kazumi/engine.js";
 import { resolveWithSniffFallback } from "./media-sniffer.js";
 import {
   detailKazumi,
@@ -141,7 +141,7 @@ async function handleSourcePlay(url) {
       );
       return jsonResponse(stream);
     } catch (error) {
-      return jsonResponse({ error: String(error?.message || error) }, 502);
+      return jsonResponse(errorPayload(error), 502);
     }
   }
 
@@ -311,9 +311,9 @@ export async function handleNativeApi(input, init = {}) {
     if (path === "/api/tokuzilla/latest") {
       return jsonResponse({ error: "特摄分区已移除" }, 410);
     }
-    if (path === "/api/source-search") return handleSourceSearch(url);
-    if (path === "/api/source-detail") return handleSourceDetail(url);
-    if (path === "/api/source-play") return handleSourcePlay(url);
+    if (path === "/api/source-search") return await handleSourceSearch(url);
+    if (path === "/api/source-detail") return await handleSourceDetail(url);
+    if (path === "/api/source-play") return await handleSourcePlay(url);
     if (path === "/api/watch-history") return handleWatchHistory(request);
 
     if (path === "/api/kazumi/repo") return handleKazumiRepo();
@@ -337,6 +337,6 @@ export async function handleNativeApi(input, init = {}) {
 
     return jsonResponse({ error: `Unsupported native API: ${path}` }, 404);
   } catch (error) {
-    return jsonResponse({ error: String(error?.message || error) }, 502);
+    return jsonResponse(errorPayload(error), 502);
   }
 }

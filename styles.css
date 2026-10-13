@@ -1898,10 +1898,17 @@ body.lan-dialog-open .mobile-nav {
 }
 
 .app-update-actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  flex-wrap: wrap;
+}
+
+.app-update-actions > button {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  justify-content: center;
+  font-size: 15px;
 }
 
 .settings-update-desc,
@@ -2788,6 +2795,84 @@ body.app-update-open {
   border-radius: 16px;
 }
 
+.entry-player-column {
+  position: relative;
+}
+
+.player-back-button {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  z-index: 6;
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.player-back-button:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.player-back-button:active {
+  transform: scale(0.94);
+}
+
+.player-back-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.entry-overview {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 16px;
+  width: min(100%, 880px);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.entry-page:not(.is-playing) .entry-player-column,
+.entry-page:not(.is-playing) .entry-sidebar,
+.entry-page.is-playing .entry-overview {
+  display: none;
+}
+
+.entry-page.is-playing {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.entry-page.is-playing .entry-topbar,
+.entry-page.is-playing .entry-hero {
+  display: none;
+}
+
+.entry-page.is-playing .player-back-button {
+  display: grid;
+}
+
+.entry-page.is-playing .entry-body {
+  animation: motion-fade-up 320ms var(--ease-decelerate, ease-out) backwards;
+}
+
 .watch-subject {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
@@ -3174,7 +3259,8 @@ body.app-update-open {
     display: block;
     height: auto;
     max-height: none;
-    overflow: auto;
+    overflow: visible;
+    overflow-x: clip;
   }
 
   body.is-mobile .lan-share-panel,
@@ -3848,8 +3934,7 @@ body.app-update-open {
 
   .settings-update-actions > .ghost-button,
   .bangumi-sync-actions > .ghost-button,
-  .sources-page-actions > .ghost-button,
-  .app-update-actions > .ghost-button {
+  .sources-page-actions > .ghost-button {
     width: 100%;
     max-width: 100%;
   }
@@ -3886,5 +3971,38 @@ body.app-update-open {
   body.is-mobile .player-section {
     min-width: 0;
     max-width: 100%;
+  }
+
+  body.is-mobile.mobile-watching .entry-page.is-playing {
+    grid-template-rows: auto;
+  }
+
+  .entry-page.is-playing .entry-player-column {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: env(safe-area-inset-top, 0px) 0 0;
+    gap: 0;
+    background: #000;
+  }
+
+  .entry-page.is-playing .entry-player-column .player-frame {
+    border-radius: 0;
+  }
+
+  .entry-page.is-playing .entry-player-column .player-meta {
+    padding: 8px 14px;
+    background: var(--panel-bg);
+  }
+
+  .entry-page.is-playing .player-back-button {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 10px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .entry-page.is-playing .entry-sidebar {
+    border-top: 0;
   }
 }

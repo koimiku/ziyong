@@ -13,6 +13,7 @@ import {
   setHtmlParser,
 } from "../../client/kazumi/engine.js";
 import { parseHtmlWithCheerio } from "./html.mjs";
+import { siteCookieHeader } from "../site-cookies.mjs";
 
 setHtmlParser(parseHtmlWithCheerio);
 
@@ -186,9 +187,10 @@ function summarizeRule(rule) {
 }
 
 async function requestPrepared(prepared) {
+  const cookie = await siteCookieHeader(prepared.url);
   return requestText(prepared.url, {
     method: prepared.method,
-    headers: prepared.headers,
+    headers: cookie ? { ...prepared.headers, Cookie: cookie } : prepared.headers,
     body: prepared.body,
   });
 }
@@ -200,6 +202,11 @@ async function requestText(url, options = {}) {
     body: options.body,
     signal: AbortSignal.timeout(20000),
   });
-  if (!response.ok) throw new Error(`上游请求失败: ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(`上游请求失败: ${response.status}`);
+    error.status = response.status;
+    error.body = await response.text().catch(() => "");
+    throw error;
+  }
   return response.text();
 }

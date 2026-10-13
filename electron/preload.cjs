@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.invoke("window:maximize"),
   close: () => ipcRenderer.invoke("window:close"),
   isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
+  verifySite: (url, userAgent) => ipcRenderer.invoke("site:verify", { url, userAgent }),
   onMaximizedChange: (callback) => {
     if (typeof callback !== "function") return;
     ipcRenderer.on("window:maximized-changed", (_event, maximized) => {

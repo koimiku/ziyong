@@ -13,7 +13,7 @@ import {
   resolveXgcartoonStream,
   searchXgcartoon,
 } from "./xgcartoon.mjs";
-import { parseKazumiSourceId, rulePlayPageUrl, rulePlayReferer } from "../client/kazumi/engine.js";
+import { errorPayload, parseKazumiSourceId, rulePlayPageUrl, rulePlayReferer } from "../client/kazumi/engine.js";
 import { hasMediaSniffer, sniffMedia } from "./media-sniffer.mjs";
 import { fetchFollowingRedirects } from "./proxy.mjs";
 import {
@@ -69,7 +69,7 @@ export async function handleSourceSearch(url, response) {
       list,
     });
   } catch (error) {
-    writeJson(response, 502, { error: String(error?.message || error) });
+    writeJson(response, 502, errorPayload(error));
   }
 }
 
@@ -136,7 +136,7 @@ export async function handleSourceDetail(url, response) {
     setCache(cacheKey, payload);
     writeJson(response, 200, payload);
   } catch (error) {
-    writeJson(response, 502, { error: String(error?.message || error) });
+    writeJson(response, 502, errorPayload(error));
   }
 }
 
@@ -224,7 +224,7 @@ export async function handleSourcePlay(url, response) {
     setCache(cacheKey, stream);
     writeJson(response, 200, stream);
   } catch (error) {
-    writeJson(response, 502, { error: String(error?.message || error) });
+    writeJson(response, 502, errorPayload(error));
   }
 }
 

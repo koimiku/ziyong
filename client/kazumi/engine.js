@@ -130,18 +130,32 @@ export function normalizeRule(input) {
   return rule;
 }
 
+export const CAPTCHA_ERROR = "captcha";
+
+export function errorPayload(error) {
+  const payload = { error: String(error?.message || error) };
+  if (error?.code === CAPTCHA_ERROR) {
+    payload.code = CAPTCHA_ERROR;
+    payload.verifyUrl = error.verifyUrl || "";
+    payload.userAgent = error.userAgent || "";
+  }
+  return payload;
+}
+
 export async function searchRule(rule, keyword, request) {
   const query = String(keyword || "").trim();
   if (!query) return [];
-  const raw =
+  const prepared =
     rule.searchMode === "api"
-      ? await request(prepareApiRequest(rule.searchApiConfig.request, { keyword: query }, rule))
-      : await request(prepareXPathSearch(rule, query));
-  assertNoCaptcha(rule, raw);
-  const items =
+      ? prepareApiRequest(rule.searchApiConfig.request, { keyword: query }, rule)
+      : prepareXPathSearch(rule, query);
+  const verifyUrl = prepared.method === "GET" ? prepared.url : rule.baseUrl || prepared.url;
+  const raw = await fetchPage(rule, prepared, request, verifyUrl);
+  const items = guardParse(rule, raw, verifyUrl, () =>
     rule.searchMode === "api"
       ? parseApiSearch(raw, rule.searchApiConfig)
-      : parseXPathSearch(raw, rule);
+      : parseXPathSearch(raw, rule)
+  );
   return items.map((item) => ({
     id: rule.searchMode === "api" ? item.source : normalizeUrl(rule.baseUrl, item.source),
     name: item.name,
@@ -153,14 +167,17 @@ export async function searchRule(rule, keyword, request) {
 export async function detailRule(rule, sourceKey, request) {
   const source = String(sourceKey || "").trim();
   if (!source) throw new Error("缺少详情地址");
-  const raw =
+  const prepared =
     rule.chapterMode === "api"
-      ? await request(prepareApiRequest(rule.chapterApiConfig.request, { source }, rule))
-      : await request(prepareChapterRequest(rule, source));
-  const roads =
+      ? prepareApiRequest(rule.chapterApiConfig.request, { source }, rule)
+      : prepareChapterRequest(rule, source);
+  const verifyUrl = rule.chapterMode === "api" ? rule.baseUrl || prepared.url : prepared.url;
+  const raw = await fetchPage(rule, prepared, request, verifyUrl);
+  const roads = guardParse(rule, raw, verifyUrl, () =>
     rule.chapterMode === "api"
       ? parseApiChapters(raw, rule.chapterApiConfig, { source, baseUrl: rule.baseUrl })
-      : parseXPathChapters(raw, rule);
+      : parseXPathChapters(raw, rule)
+  );
   if (!roads.length) throw new Error("没有解析到播放线路");
 
   const lines = roads.map((road, roadIndex) => ({
@@ -200,10 +217,11 @@ export async function resolveRulePlay(rule, watchUrl, request) {
   if (!pageUrl) throw new Error("缺少播放页地址");
   if (looksLikeMedia(pageUrl)) return { mediaUrl: pageUrl, pageUrl, headers };
 
-  const html = await request(prepareDocumentRequest(pageUrl, rule));
+  const html = await fetchPage(rule, prepareDocumentRequest(pageUrl, rule), request, pageUrl);
   const mediaUrl = await findPlayable(html, pageUrl, rule, request);
   if (!mediaUrl) {
-    throw new Error("这条规则没有给出可播放的直链，请换线路或换片源");
+    if (needsVerification(rule, html)) throw captchaRequired(rule, pageUrl);
+    throw new Error("这条规则没有给出可播放的直链");
   }
   return { mediaUrl, pageUrl, headers };
 }
@@ -292,6 +310,11 @@ function normalizeAntiCrawler(config) {
   const source = config && typeof config === "object" ? config : {};
   return {
     enabled: Boolean(source.enabled),
+    captchaType: Number(source.captchaType || 1),
+    captchaImage: String(source.captchaImage || ""),
+    captchaInput: String(source.captchaInput || ""),
+    captchaButton: String(source.captchaButton || ""),
+    captchaDetectType: Number(source.captchaDetectType || 1),
     captchaDetectValue: String(source.captchaDetectValue || ""),
   };
 }
@@ -528,11 +551,74 @@ function looksLikeMedia(url) {
   return /\.m3u8(\?|#|$)/i.test(url) || /\.mp4(\?|#|$)/i.test(url);
 }
 
-function assertNoCaptcha(rule, raw) {
-  const marker = rule.antiCrawlerConfig?.captchaDetectValue;
-  if (rule.antiCrawlerConfig?.enabled && marker && String(raw || "").includes(marker)) {
-    throw new Error("该规则触发了站点验证，当前无法继续");
+// Markers of common verification walls: Cloudflare challenges and the MacCMS /
+// DSXX image captchas most anime sites run on.
+const CHALLENGE_MARKERS = [
+  /cf-chl-|challenge-platform|cf_chl_opt|<title>\s*Just a moment/i,
+  /mac_verify_img|ds-verify-img|verify_submit|verify-submit/i,
+  /系统安全验证|请输入验证码|人机验证|安全检查中/,
+];
+
+function captchaRequired(rule, verifyUrl) {
+  const error = new Error("该网站需要先完成验证");
+  error.code = CAPTCHA_ERROR;
+  error.verifyUrl = verifyUrl || rule.baseUrl || "";
+  error.userAgent = rule.userAgent || DEFAULT_UA;
+  return error;
+}
+
+// Only consulted when a page yields nothing usable, so ordinary pages that happen
+// to carry a comment captcha are never flagged.
+function needsVerification(rule, raw) {
+  const text = String(raw || "");
+  if (!text) return false;
+  const config = rule.antiCrawlerConfig || {};
+  if (config.enabled) {
+    const detect = config.captchaDetectValue.trim();
+    const probes = [
+      detect.startsWith("/") ? detect : "",
+      /verify|captcha/i.test(config.captchaImage) ? config.captchaImage : "",
+    ].filter(Boolean);
+    if (probes.length) {
+      let root = null;
+      try {
+        root = parseHtmlImpl(text);
+      } catch {
+        root = null;
+      }
+      const hit = probes.some((expression) => {
+        try {
+          return root && queryXPath(root, expression).length > 0;
+        } catch {
+          return false;
+        }
+      });
+      if (hit) return true;
+    }
+    if (detect && !detect.startsWith("/") && text.includes(detect)) return true;
   }
+  return CHALLENGE_MARKERS.some((pattern) => pattern.test(text));
+}
+
+async function fetchPage(rule, prepared, request, verifyUrl) {
+  try {
+    return await request(prepared);
+  } catch (error) {
+    if (error?.body && needsVerification(rule, error.body)) throw captchaRequired(rule, verifyUrl);
+    throw error;
+  }
+}
+
+function guardParse(rule, raw, verifyUrl, parse) {
+  let items;
+  try {
+    items = parse();
+  } catch (error) {
+    if (needsVerification(rule, raw)) throw captchaRequired(rule, verifyUrl);
+    throw error;
+  }
+  if (!items.length && needsVerification(rule, raw)) throw captchaRequired(rule, verifyUrl);
+  return items;
 }
 
 function documentHeaders(rule, url) {
@@ -671,7 +757,8 @@ function tokenizeJsonPath(expression) {
 }
 
 function parseXPath(expression) {
-  const expr = String(expression || "").trim();
+  // Paths are always evaluated against the current node, so ".//a" and "//a" match the same nodes.
+  const expr = String(expression || "").trim().replace(/^\.(?=\/)/, "");
   if (!expr.startsWith("/")) throw new Error(`XPath 必须以 / 开头: ${expression}`);
   const steps = [];
   let index = 0;

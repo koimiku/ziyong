@@ -9,6 +9,7 @@ const AD_URL = /\/(ads?|adv|advert|guanggao|gg)\/|[?&](ad|ads)=/i;
 const BLOCKED_TYPES = new Set(["image", "font"]);
 const MAX_CONCURRENT = 2;
 const MP4_GRACE_MS = 1500;
+export const SNIFFER_PARTITION = "persist:media-sniffer";
 
 const AUTOPLAY_SCRIPT = `(() => {
   document.querySelectorAll("video").forEach((video) => {
@@ -30,7 +31,7 @@ function headerValue(headers, name) {
 // Loads a play page in a hidden window and captures the first real video request,
 // the way Kazumi's WebView parser does, so signed or script-generated URLs work.
 export function createMediaSniffer({ userAgent }) {
-  const ses = session.fromPartition("persist:media-sniffer");
+  const ses = session.fromPartition(SNIFFER_PARTITION);
   ses.setUserAgent(userAgent);
   ses.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 

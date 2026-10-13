@@ -16,9 +16,11 @@ import {
   getSourceNamesText,
   loadSourcePlaylist,
   prepareWatchSearch,
+  isVerifyError,
   searchSourceForItem,
 } from "./sources.js";
-import { createRetrievalPanel } from "./source-retrieval.js";
+import { createSourceSheet } from "./source-sheet.js";
+import { canVerifySite, verifySite } from "./site-verify.js";
 import {
   cleanSynopsis,
   escapeAttribute,
@@ -26,7 +28,9 @@ import {
   pickDisplayTitle,
 } from "./utils.js";
 import { getWatchProgress, recordWatch } from "./watch-history.js";
-import { createSourceProgress } from "./source-progress.js";
+
+const SHEET_MIN_SCORE = 40;
+const SHEET_RESULT_LIMIT = 12;
 
 let activePlayerController = null;
 let lastCardOrigin = null;
@@ -107,6 +111,7 @@ export function stopActivePlayback() {
 
 export function exitWatchMode() {
   stopActivePlayback();
+  document.body.classList.remove("source-sheet-open");
   appShell.classList.remove("is-watching");
   detailPanel.dataset.requestId = "";
   detailPanel.innerHTML = `
@@ -121,6 +126,7 @@ export function exitWatchMode() {
 
 export async function showDetails(item, options = {}) {
   stopActivePlayback();
+  document.body.classList.remove("source-sheet-open");
   recordWatch(item);
 
   const title = pickDisplayTitle(item);
@@ -137,152 +143,193 @@ export async function showDetails(item, options = {}) {
   document.querySelector("#watchBackButton")?.addEventListener("click", () => {
     exitWatchMode();
   });
-
   bindPlayerControls(players);
 
-  const progress = createSourceProgress(document.querySelector("#sourceSection"));
+  const page = detailPanel.querySelector(".entry-page");
   const { sources, queries, preset } = await prepareWatchSearch(item);
-  if (detailPanel.dataset.requestId !== requestId) return;
+  if (detailPanel.dataset.requestId !== requestId || !page?.isConnected) return;
 
-  runSourceRetrieval({ item, title, resume, requestId, sources, queries, preset, progress });
+  startWatchFlow({ page, item, requestId, sources, queries, preset });
 }
 
-// Each source searches and loads on its own; the player mounts as soon as a
-// preferred source is playable and later sources merge into the episode map.
-function runSourceRetrieval({ item, title, resume, requestId, sources, queries, preset, progress }) {
-  const isCurrent = () => detailPanel.dataset.requestId === requestId;
-  const results = new Map();
-  const playlistState = { items: [] };
-  const deferredTorrents = [];
-  let playerApi = null;
-  let mounted = false;
-  let fallbackShown = false;
-  let outstanding = 0;
-  let graceTimer = null;
+// Kazumi flow: every source searches in the background, the user picks a result
+// in the source sheet, and the player page then uses only that source.
+function startWatchFlow({ page, item, requestId, sources, queries, preset }) {
+  const isCurrent = () => detailPanel.dataset.requestId === requestId && page.isConnected;
+  const startHint = page.querySelector("#startWatchHint");
+  let currentSourceId = null;
+  let openToken = 0;
 
-  const keywords = [...new Set([...queries, ...(item.aliases || [])].map((v) => String(v).trim()).filter(Boolean))].slice(0, 6);
-  const panel = createRetrievalPanel({
+  const keywords = [
+    ...new Set([...queries, ...(item.aliases || [])].map((value) => String(value).trim()).filter(Boolean)),
+  ].slice(0, 6);
+  const sheet = createSourceSheet({
+    container: page,
     keywords,
+    onSelect: (source, match) => openSource(source, match),
     onRetry: (source) => runSource(source, queries),
-    onKeyword: (targets, keyword) => targets.forEach((source) => runSource(source, [keyword], { minScore: 55 })),
+    onSearch: (source, keyword) => runSource(source, [keyword], { minScore: 0 }),
+    onVerify: async (source, verify) => {
+      if (!(await runVerification(verify))) return;
+      runSource(source, queries);
+    },
   });
+  let pendingVerify = null;
 
-  const watchSupport = document.querySelector("#watchSupport");
-  if (watchSupport) {
-    watchSupport.insertAdjacentHTML(
-      "beforeend",
-      `<section class="entry-panel source-retrieval" id="sourceRetrievalPanel" aria-label="片源检索"></section>`
-    );
+  async function runVerification(verify) {
+    try {
+      await verifySite(verify);
+      return isCurrent();
+    } catch (error) {
+      console.warn("site verify", error);
+      return false;
+    }
   }
-  panel.setSources(sources);
-  progress.onProgress({ type: "start", sources });
+  sheet.setSources(sources);
+  updateStartHint();
 
-  function isPreferred(playlist) {
-    if (resume?.sourceId) return playlist.sourceId === resume.sourceId;
-    return playlist.speedRank < 6;
-  }
-
-  function mount() {
-    if (mounted || !isCurrent()) return;
-    const sourceSection = document.querySelector("#sourceSection");
-    const support = document.querySelector("#watchSupport");
-    if (!sourceSection || !support) return;
-    clearTimeout(graceTimer);
-    mounted = true;
-    playlistState.items.sort((a, b) => a.speedRank - b.speedRank || b.matchScore - a.matchScore);
-    playlistState.items.push(...deferredTorrents.splice(0));
-    const episodeSourceMap = buildEpisodeSourceMap(playlistState.items);
-    const rendered = renderWatchPanels(
-      [...results.values()],
-      playlistState.items,
-      episodeSourceMap,
-      item,
-      title,
-      resume
-    );
-    sourceSection.innerHTML = rendered.player;
-    support.innerHTML = rendered.support;
-    panel.render();
-    playerApi = bindSourcePlayer(playlistState, episodeSourceMap, { itemId: item.id, resume });
-    activePlayerController = playerApi;
-  }
-
-  function showFallback() {
-    if (mounted || fallbackShown || !isCurrent()) return;
-    const sourceSection = document.querySelector("#sourceSection");
-    const support = document.querySelector("#watchSupport");
-    if (!sourceSection || !support) return;
-    fallbackShown = true;
-    sourceSection.innerHTML = renderSourceFallback();
-    support.innerHTML = renderEmptySupport(item, title, [...results.values()]);
-    panel.render();
-  }
-
-  function addPlaylist(playlist) {
-    if (playlist.kind === "torrent" && !mounted) {
-      deferredTorrents.push(playlist);
+  function updateStartHint() {
+    if (!startHint) return;
+    if (!sources.length) {
+      startHint.textContent = "还没有可用的片源，请先到「片源」页安装规则。";
       return;
     }
-    playlistState.items.push(playlist);
-    if (mounted) {
-      if (activePlayerController === playerApi) {
-        playerApi?.refreshEpisodeMap?.(buildEpisodeSourceMap(playlistState.items));
-      }
-      return;
+    const { total, done, ready, verify } = sheet.stats();
+    const verifyNote = verify ? `，${verify} 个需要网页验证` : "";
+    if (done < total) {
+      startHint.textContent = `正在检索片源 ${done}/${total}${ready ? `，${ready} 个已找到` : ""}${verifyNote}`;
+    } else {
+      startHint.textContent = ready
+        ? `${ready} 个片源找到了这部番${verifyNote}`
+        : verify
+          ? `${verify} 个片源需要网页验证，打开片源面板去验证`
+          : "暂时没有片源找到这部番，可以在片源面板里换个名字检索";
     }
-    if (isPreferred(playlist)) {
-      mount();
-    } else if (!graceTimer) {
-      graceTimer = setTimeout(mount, 2500);
-    }
-  }
-
-  function settle() {
-    if (outstanding > 0 || !isCurrent()) return;
-    if (playlistState.items.length) mount();
-    else showFallback();
   }
 
   async function runSource(source, sourceQueries, options = {}) {
     if (!isCurrent()) return;
-    outstanding += 1;
-    panel.update(source.id, { state: "pending", matchName: "" });
-    const initial = !results.has(source.id);
+    sheet.update(source.id, { state: "pending", error: "" });
+    updateStartHint();
     try {
-      const matches = preset.get(source.id) || (await searchSourceForItem(source, sourceQueries, options));
+      const presetMatches = sourceQueries === queries ? preset.get(source.id) : null;
+      const matches =
+        presetMatches ||
+        (await searchSourceForItem(source, sourceQueries, {
+          minScore: SHEET_MIN_SCORE,
+          limit: SHEET_RESULT_LIMIT,
+          ...options,
+        }));
       if (!isCurrent()) return;
-      results.set(source.id, { source, matches, error: null });
-      if (initial) progress.onProgress({ type: "source", source, state: matches.length ? "found" : "empty", count: matches.length });
-      if (!matches.length) {
-        panel.update(source.id, { state: "empty" });
-        return;
-      }
-      panel.update(source.id, { state: "loading", matchName: matches[0].name });
-      const playlist = await loadSourcePlaylist({ source, matches });
-      if (!isCurrent()) return;
-      if (!playlist) {
-        panel.update(source.id, { state: "nolines" });
-        return;
-      }
-      const episodes = Math.max(...playlist.lines.map((line) => line.episodes?.length || 0));
-      panel.update(source.id, { state: "ready", matchName: playlist.matchName, episodes });
-      addPlaylist(playlist);
+      sheet.update(source.id, { state: matches.length ? "ready" : "empty", matches });
     } catch (error) {
       console.warn(source.id, error);
       if (!isCurrent()) return;
-      results.set(source.id, { source, matches: [], error });
-      if (initial) progress.onProgress({ type: "source", source, state: "error", count: 0 });
-      panel.update(source.id, { state: "error", error: describeSourceError(error) });
-    } finally {
-      outstanding -= 1;
-      settle();
+      if (isVerifyError(error)) {
+        sheet.update(source.id, {
+          state: "verify",
+          matches: [],
+          verify: { verifyUrl: error.verifyUrl, userAgent: error.userAgent },
+        });
+      } else {
+        sheet.update(source.id, { state: "error", matches: [], error: describeSourceError(error) });
+      }
     }
+    updateStartHint();
   }
 
-  if (!sources.length) {
-    showFallback();
-    return;
+  async function openSource(source, match) {
+    sheet.close();
+    stopActivePlayback();
+    const token = ++openToken;
+    currentSourceId = source.id;
+    page.classList.add("is-playing");
+    window.scrollTo?.({ top: 0 });
+
+    const sourceSection = page.querySelector("#sourceSection");
+    const support = page.querySelector("#watchSupport");
+    sourceSection.innerHTML = renderPlayerPlaceholder(`正在加载 ${source.name} 的播放列表…`);
+    support.innerHTML = renderCurrentSource(source, match);
+
+    let playlist = null;
+    try {
+      playlist = await loadSourcePlaylist({ source, matches: [match] });
+    } catch (error) {
+      if (token !== openToken || !isCurrent()) return;
+      if (!isVerifyError(error)) throw error;
+      const verifiable = canVerifySite();
+      pendingVerify = {
+        verify: { verifyUrl: error.verifyUrl, userAgent: error.userAgent },
+        retry: () => openSource(source, match),
+      };
+      sourceSection.innerHTML = renderPlayerPlaceholder(
+        verifiable
+          ? `${source.name} 要求先完成网页验证，验证后会自动重新加载`
+          : `${source.name} 要求先完成网页验证，请在电脑版或安卓 App 中验证`,
+        true,
+        verifiable
+      );
+      return;
+    }
+    if (token !== openToken || !isCurrent()) return;
+    if (!playlist) {
+      sourceSection.innerHTML = renderPlayerPlaceholder(`${source.name} 没有可播放的线路，请更换片源`, true);
+      return;
+    }
+
+    const items = [playlist];
+    const episodeSourceMap = buildEpisodeSourceMap(items);
+    const resume = getWatchProgress(item.id);
+    const rendered = renderWatchPanels(playlist, episodeSourceMap, resume);
+    sourceSection.innerHTML = rendered.player;
+    support.innerHTML = renderCurrentSource(source, match) + rendered.support;
+    activePlayerController = bindSourcePlayer({ items }, episodeSourceMap, {
+      itemId: item.id,
+      resume,
+      singleSource: true,
+      autoplay: true,
+    });
   }
+
+  function backToDetail() {
+    openToken += 1;
+    stopActivePlayback();
+    page.classList.remove("is-playing");
+    page.querySelector("#sourceSection").innerHTML = "";
+    page.querySelector("#watchSupport").innerHTML = "";
+    const label = page.querySelector("#startWatchLabel");
+    const resume = getWatchProgress(item.id);
+    if (label) label.textContent = startWatchLabel(resume);
+  }
+
+  page.addEventListener("click", (event) => {
+    if (event.target.closest("#startWatchButton")) {
+      sheet.open(getWatchProgress(item.id)?.sourceId);
+      return;
+    }
+    if (event.target.closest("[data-change-source]")) {
+      sheet.open(currentSourceId);
+      return;
+    }
+    if (event.target.closest("[data-site-verify]")) {
+      handleSiteVerify();
+      return;
+    }
+    if (event.target.closest("#playerBackButton")) backToDetail();
+  });
+
+  async function handleSiteVerify() {
+    const frame = page.querySelector("#playerFrame");
+    if (frame?.classList.contains("needs-verify")) {
+      const verify = { verifyUrl: frame.dataset.verifyUrl, userAgent: frame.dataset.verifyUa };
+      if (await runVerification(verify)) page.querySelector("#playStartButton")?.click();
+      return;
+    }
+    const job = pendingVerify;
+    if (!job) return;
+    if (await runVerification(job.verify)) job.retry();
+  }
+
   sources.forEach((source) => runSource(source, queries));
 }
 
@@ -294,6 +341,10 @@ function describeSourceError(error) {
   if (status) return `站点返回 ${status[1]}`;
   if (/fetch|network|Failed/i.test(message)) return "连接失败";
   return "检索失败";
+}
+
+function startWatchLabel(resume) {
+  return resume?.episodeLabel ? `继续观看 ${resume.episodeLabel}` : "开始观看";
 }
 
 function renderEntryShell(item, title, players, resume) {
@@ -333,17 +384,63 @@ function renderEntryShell(item, title, players, resume) {
       </section>
 
       <div class="entry-body">
-        <section class="entry-player-column" aria-label="播放器">
-          ${renderPlayerSection(players)}
-          <div class="watch-player-slot" id="sourceSection">
-            <div class="source-loading">正在匹配在线片源：${escapeHtml(getSourceNamesText())}...</div>
+        <section class="entry-overview" aria-label="开始观看">
+          <div class="start-watch">
+            <button class="start-watch-button" id="startWatchButton" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+              <span id="startWatchLabel">${escapeHtml(startWatchLabel(resume))}</span>
+            </button>
+            <p class="start-watch-hint" id="startWatchHint">正在准备片源…</p>
           </div>
+          ${renderPlayerSection(players)}
+          <section class="watch-summary entry-panel">
+            <div class="support-section-title"><strong>简介</strong></div>
+            <p class="summary">${escapeHtml(cleanSynopsis(item.synopsis))}</p>
+            ${renderTags(item.tags)}
+            ${renderBangumiLink(item)}
+          </section>
         </section>
-        <aside class="entry-sidebar" id="watchSupport" aria-label="选集与片源">
-          <div class="watch-support-loading">正在加载剧集与多源线路...</div>
-        </aside>
+        <section class="entry-player-column" aria-label="播放器">
+          <button class="player-back-button" id="playerBackButton" type="button" aria-label="返回详情">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div class="watch-player-slot" id="sourceSection"></div>
+        </section>
+        <aside class="entry-sidebar" id="watchSupport" aria-label="选集与线路"></aside>
       </div>
     </div>
+  `;
+}
+
+function renderPlayerPlaceholder(message, failed = false, verify = false) {
+  return `
+    <div class="player-section source-player">
+      <div class="player-frame player-placeholder ${failed ? "is-failed" : "is-loading"}">
+        ${failed ? "" : `<i class="source-sheet-spinner" aria-hidden="true"></i>`}
+        <p>${escapeHtml(message)}</p>
+        ${
+          failed
+            ? `<div class="player-placeholder-actions">
+                ${verify ? `<button class="small-button" type="button" data-site-verify>去验证</button>` : ""}
+                <button class="${verify ? "ghost-button" : "small-button"}" type="button" data-change-source>更换片源</button>
+              </div>`
+            : ""
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderCurrentSource(source, match) {
+  return `
+    <section class="entry-panel current-source" aria-label="当前片源">
+      <div class="current-source-text">
+        <span>当前片源</span>
+        <strong>${escapeHtml(source.name)}</strong>
+        <em>${escapeHtml(match.name)}</em>
+      </div>
+      <button class="ghost-button" type="button" data-change-source>更换片源</button>
+    </section>
   `;
 }
 
@@ -353,27 +450,13 @@ function getAuthorizedPlayers(bangumiId) {
     .filter((player) => isAllowedEmbedUrl(player.embedUrl));
 }
 
-function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, title, resume) {
-  if (!playlists.length) {
-    return {
-      player: renderSourceFallback(),
-      support: renderEmptySupport(item, title, sourceResults),
-    };
-  }
-
+function renderWatchPanels(playlist, episodeSourceMap, resume) {
   const episodeIndex = findEpisodeIndex(episodeSourceMap, resume);
   const episodeEntry = episodeSourceMap[episodeIndex] || episodeSourceMap[0];
   const sourceIndex = findSourceIndex(episodeEntry, resume);
   const initialSource = episodeEntry?.sources?.[sourceIndex] || episodeEntry?.sources?.[0];
-  const initialPlaylist = initialSource
-    ? playlists[initialSource.playlistIndex]
-    : playlists[0];
-  const initialLine = initialSource
-    ? initialPlaylist.lines[initialSource.lineIndex]
-    : initialPlaylist.lines[0];
-  const initialEpisode = initialSource
-    ? initialLine.episodes[initialSource.episodeIndex]
-    : initialLine.episodes[0];
+  const initialLine = playlist.lines[initialSource?.lineIndex ?? 0] || playlist.lines[0];
+  const initialEpisode = initialLine.episodes[initialSource?.episodeIndex ?? 0] || initialLine.episodes[0];
 
   return {
     player: `
@@ -385,17 +468,21 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
             playsinline
             preload="none"
             hidden
-            title="${escapeAttribute(`${initialPlaylist.sourceName} ${initialEpisode.label}`)}"
+            title="${escapeAttribute(`${playlist.sourceName} ${initialEpisode.label}`)}"
           ></video>
           <div class="player-status" id="sourcePlayerStatus" hidden></div>
           <button class="play-start-button" id="playStartButton" type="button">
             <span class="play-start-icon" aria-hidden="true">▶</span>
             <strong>${resume?.position > 0 ? "继续播放" : "立即播放"}</strong>
-            <em id="playStartHint">${escapeHtml(initialEpisode.label)} · ${escapeHtml(initialPlaylist.sourceName)}</em>
+            <em id="playStartHint">${escapeHtml(initialEpisode.label)} · ${escapeHtml(playlist.sourceName)}</em>
           </button>
+          <div class="player-corner-actions">
+            <button class="player-switch-source player-verify" type="button" data-site-verify>去验证</button>
+            <button class="player-switch-source" type="button" data-change-source>更换片源</button>
+          </div>
         </div>
         <div class="player-meta" id="sourcePlayerMeta">
-          ${escapeHtml(initialPlaylist.matchName)} · ${escapeHtml(initialLine.name)} · ${escapeHtml(initialEpisode.label)}
+          ${escapeHtml(playlist.matchName)} · ${escapeHtml(initialLine.name)} · ${escapeHtml(initialEpisode.label)}
         </div>
       </div>
     `,
@@ -419,13 +506,13 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
         </div>
       </section>
 
-      <section class="media-selector entry-panel" aria-label="同集多源">
+      <section class="media-selector entry-panel" aria-label="播放线路">
         <div class="support-section-title">
-          <strong>片源线路</strong>
+          <strong>播放线路</strong>
         </div>
         <div class="option-dropdown" id="sourceDropdown">
           <button class="option-dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-            <span id="sourceDropdownValue">${escapeHtml(sourceOptionLabel(initialSource || {}) || "选择片源")}</span>
+            <span id="sourceDropdownValue">${escapeHtml(sourceOptionLabel(initialSource || {}) || "选择线路")}</span>
             <span class="option-dropdown-caret" aria-hidden="true"></span>
           </button>
           <div class="option-dropdown-menu" id="episodeSourceChips" role="listbox" hidden>
@@ -433,37 +520,8 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
           </div>
         </div>
       </section>
-
-      <section class="entry-panel source-retrieval" id="sourceRetrievalPanel" aria-label="片源检索"></section>
-
-      <section class="watch-summary entry-panel">
-        <div class="support-section-title"><strong>简介</strong></div>
-        <p class="summary">${escapeHtml(cleanSynopsis(item.synopsis))}</p>
-        ${renderTags(item.tags)}
-        ${renderBangumiLink(item)}
-        ${renderAlternateMatches(sourceResults)}
-      </section>
     `,
   };
-}
-
-function renderEmptySupport(item, title, sourceResults) {
-  return `
-    <section class="entry-panel source-retrieval" id="sourceRetrievalPanel" aria-label="片源检索"></section>
-    <section class="watch-summary entry-panel">
-      <div class="watch-subject">
-        <img class="watch-cover" src="${escapeAttribute(getPosterUrl(item))}" alt="${escapeAttribute(title)} 海报" />
-        <div>
-          <h3 class="watch-subject-title">${escapeHtml(title)}</h3>
-          <p class="watch-subject-subtitle">${escapeHtml(item.aliases.join(" / "))}</p>
-        </div>
-      </div>
-      <p class="summary">${escapeHtml(cleanSynopsis(item.synopsis))}</p>
-      ${renderTags(item.tags)}
-      ${renderBangumiLink(item)}
-      ${renderAlternateMatches(sourceResults)}
-    </section>
-  `;
 }
 
 function renderBangumiLink(item) {
@@ -474,43 +532,6 @@ function renderBangumiLink(item) {
         <span>Bangumi 条目</span>
         <span aria-hidden="true">↗</span>
       </a>
-    </div>
-  `;
-}
-
-function renderSourceFallback() {
-  return `
-    <div class="source-header">
-      <strong>在线观看</strong>
-      <span>暂时没有片源找到这部番，可以在「片源检索」里换个名字或重试失败的片源。</span>
-    </div>
-  `;
-}
-
-function renderAlternateMatches(sourceResults) {
-  const extras = sourceResults.flatMap(({ source, matches }) =>
-    matches.slice(1).map((match) => ({ source, match }))
-  );
-
-  if (!extras.length) return "";
-
-  return `
-    <div class="option-dropdown">
-      <button class="option-dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-        <span>其他匹配 · ${extras.length}</span>
-        <span class="option-dropdown-caret" aria-hidden="true"></span>
-      </button>
-      <div class="option-dropdown-menu" role="listbox" hidden>
-        ${extras
-          .map(
-            ({ source, match }) => `
-              <a class="option-dropdown-item" href="${escapeAttribute(match.url)}" target="_blank" rel="noreferrer">
-                ${escapeHtml(source.name)} · ${escapeHtml(match.name)}
-              </a>
-            `
-          )
-          .join("")}
-      </div>
     </div>
   `;
 }

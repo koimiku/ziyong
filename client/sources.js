@@ -131,17 +131,17 @@ export function getSourceQueryCandidates(item) {
   ].slice(0, 3);
 }
 
-export function searchSourceForItem(source, queries, { minScore = 70 } = {}) {
+export function searchSourceForItem(source, queries, { minScore = 70, limit = 4 } = {}) {
   let timer = null;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error("检索超时")), SOURCE_SEARCH_TIMEOUT_MS);
   });
-  return Promise.race([searchWatchSource(source, queries, minScore), timeout]).finally(() =>
+  return Promise.race([searchWatchSource(source, queries, minScore, limit), timeout]).finally(() =>
     clearTimeout(timer)
   );
 }
 
-async function searchWatchSource(source, queries, minScore) {
+async function searchWatchSource(source, queries, minScore, limit) {
   const collected = new Map();
 
   // Main title first; aliases only when it yields nothing usable.
@@ -170,7 +170,7 @@ async function searchWatchSource(source, queries, minScore) {
   return [...collected.values()]
     .filter((entry) => entry.matchScore >= minScore)
     .sort((a, b) => b.matchScore - a.matchScore)
-    .slice(0, 4);
+    .slice(0, limit);
 }
 
 function scoreSourceTitle(query, title) {
@@ -223,7 +223,7 @@ export async function fetchSourceSearch(sourceId, query) {
   );
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `Source search failed: ${sourceId} ${response.status}`);
+    throw apiError(payload, `Source search failed: ${sourceId} ${response.status}`);
   }
   return response.json();
 }
@@ -233,9 +233,24 @@ export async function fetchSourceDetail(sourceId, id) {
     fetch(`/api/source-detail?source=${encodeURIComponent(sourceId)}&id=${encodeURIComponent(id)}`)
   );
   if (!response.ok) {
-    throw new Error(`Source detail failed: ${sourceId} ${response.status}`);
+    const payload = await response.json().catch(() => ({}));
+    throw apiError(payload, `Source detail failed: ${sourceId} ${response.status}`);
   }
   return response.json();
+}
+
+export function apiError(payload, fallback) {
+  const error = new Error(payload?.error || fallback);
+  if (payload?.code) {
+    error.code = payload.code;
+    error.verifyUrl = payload.verifyUrl || "";
+    error.userAgent = payload.userAgent || "";
+  }
+  return error;
+}
+
+export function isVerifyError(error) {
+  return error?.code === "captcha";
 }
 
 export function sourceSpeedRank(source) {
@@ -244,6 +259,7 @@ export function sourceSpeedRank(source) {
 }
 
 export async function loadSourcePlaylist({ source, matches }) {
+  let verifyError = null;
   for (const match of (matches || []).slice(0, 6)) {
     try {
       const detail = await fetchSourceDetail(source.id, match.id);
@@ -260,8 +276,10 @@ export async function loadSourcePlaylist({ source, matches }) {
       };
     } catch (error) {
       console.warn(error);
+      if (isVerifyError(error)) verifyError = error;
     }
   }
+  if (verifyError) throw verifyError;
   return null;
 }
 export async function fetchKazumiRepo() {

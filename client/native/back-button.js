@@ -42,6 +42,16 @@ function handleAndroidBack(App) {
     return;
   }
 
+  if (document.body.classList.contains("source-sheet-open")) {
+    document.querySelector("#sourceSheet [data-sheet-close]")?.click();
+    return;
+  }
+
+  if (document.querySelector(".entry-page.is-playing")) {
+    document.querySelector("#playerBackButton")?.click();
+    return;
+  }
+
   if (appShell?.classList.contains("is-watching") || document.body.classList.contains("mobile-watching")) {
     exitWatchMode();
     return;

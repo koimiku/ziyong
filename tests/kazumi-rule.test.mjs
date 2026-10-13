@@ -144,6 +144,42 @@ test("json path reads nested lists", () => {
   assert.equal(readJsonPath(rows[1], "$.title")[0], "B");
 });
 
+test("a captcha wall is reported as a verification request", async () => {
+  setHtmlParser(parseHtmlWithCheerio);
+  const rule = normalizeRule({
+    ...xpathRule,
+    baseURL: xpathRule.baseUrl,
+    antiCrawlerConfig: {
+      enabled: true,
+      captchaType: 1,
+      captchaDetectType: 1,
+      captchaDetectValue: "//div[contains(@class, 'mac_msg_jump')]//input[@name='verify']",
+    },
+  });
+  const wall = `<div class="mac_msg_jump"><img src="/verify/index.html" /><input name="verify" /></div>`;
+  await assert.rejects(
+    searchRule(rule, "示例", async () => wall),
+    (error) => error.code === "captcha" && error.verifyUrl === "https://example.com/s?wd=%E7%A4%BA%E4%BE%8B"
+  );
+
+  const challenge = Object.assign(new Error("上游请求失败: 403"), {
+    status: 403,
+    body: "<html><head><title>Just a moment...</title></head></html>",
+  });
+  await assert.rejects(
+    searchRule(xpathRule, "示例", async () => {
+      throw challenge;
+    }),
+    (error) => error.code === "captcha"
+  );
+});
+
+test("an ordinary empty result page is not treated as a captcha", async () => {
+  setHtmlParser(parseHtmlWithCheerio);
+  const list = await searchRule(xpathRule, "示例", async () => "<div>没有找到</div>");
+  assert.deepEqual(list, []);
+});
+
 test("playback uses a direct address exposed by the play page", async () => {
   const found = await resolveRulePlay(
     xpathRule,

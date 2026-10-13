@@ -342,7 +342,7 @@ function showUpdateDialog(release) {
   const confirm = document.querySelector("#appUpdateConfirm");
   if (confirm && !installing) {
     confirm.disabled = false;
-    confirm.textContent = "下载并安装";
+    confirm.textContent = "下载";
   }
   if (title) title.textContent = `发现新版本 v${release.version}`;
   if (tip) {
@@ -398,7 +398,7 @@ async function installRelease(release) {
     if (tip) tip.textContent = "下载完成。请在系统安装界面点「安装」。";
     if (button) {
       button.disabled = false;
-      button.textContent = "下载并安装";
+      button.textContent = "下载";
     }
   } catch (error) {
     const message = String(error?.message || error || "下载失败");

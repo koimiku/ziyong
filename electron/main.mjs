@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setAppRoot, startServer } from "../server.mjs";
 import { setMediaSniffer } from "../server/media-sniffer.mjs";
-import { createMediaSniffer } from "./media-sniffer.mjs";
+import { setSiteCookieProvider } from "../server/site-cookies.mjs";
+import { createMediaSniffer, SNIFFER_PARTITION } from "./media-sniffer.mjs";
+import { createSiteVerifier } from "./site-verify.mjs";
 
 const APP_PORT = Number(process.env.PORT || process.env.ANIME_PORT || 47890);
 const ELECTRON_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -185,6 +187,10 @@ app.whenReady().then(() => {
     .getUserAgent()
     .replace(/\s+(Electron|anime)\/\S+/gi, "");
   setMediaSniffer(createMediaSniffer({ userAgent: browserUserAgent }));
+
+  const siteVerifier = createSiteVerifier(session.fromPartition(SNIFFER_PARTITION));
+  setSiteCookieProvider(siteVerifier.cookieHeader);
+  ipcMain.handle("site:verify", (_event, options) => siteVerifier.open(mainWindow, options));
 
   createWindow().catch((error) => {
     console.error(error);

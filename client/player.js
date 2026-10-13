@@ -1,6 +1,7 @@
 import { renderEpisodeSourceChips, sourceOptionLabel } from "./episode-sources.js";
 import { recordWatchProgress } from "./watch-history.js";
 import { escapeHtml } from "./utils.js";
+import { apiError, isVerifyError } from "./sources.js";
 
 const streamCache = new Map();
 const MAX_LINES_PER_SOURCE = 2;
@@ -316,6 +317,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     playStartButton.querySelector("strong").textContent =
       state.resumePosition > 0 ? "继续播放" : "立即播放";
     playStartHint.classList.remove("is-error");
+    playerFrame.classList.remove("is-failed", "needs-verify");
     playStartHint.textContent = `${episode.label} · ${source.sourceName}`;
   }
 
@@ -363,8 +365,11 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     state.started = true;
     destroyHls();
     showLoading();
+    playerFrame.classList.remove("is-failed", "needs-verify");
 
-    const candidates = buildPlayCandidates(true).concat(buildPlayCandidates(false));
+    const candidates = context.singleSource
+      ? buildPlayCandidates(true)
+      : buildPlayCandidates(true).concat(buildPlayCandidates(false));
     const seen = new Set();
     const perSource = new Map();
     const ordered = candidates
@@ -432,8 +437,16 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
 
     if (requestId !== state.requestId) return;
     showIdle();
-    playStartButton.querySelector("strong").textContent = "重试播放";
-    playStartHint.textContent = lastError?.message || "暂时无法播放，请换一条片源";
+    playerFrame.classList.add("is-failed");
+    playStartButton.querySelector("strong").textContent = "重试";
+    if (isVerifyError(lastError)) {
+      playerFrame.classList.add("needs-verify");
+      playerFrame.dataset.verifyUrl = lastError.verifyUrl;
+      playerFrame.dataset.verifyUa = lastError.userAgent;
+      playStartHint.textContent = "该网站需要先完成验证，验证后点重试";
+    } else {
+      playStartHint.textContent = `${(lastError?.message || "解析失败").replace(/，请换.*$/, "")}，可以重试或更换片源`;
+    }
     playStartHint.classList.add("is-error");
   }
 
@@ -457,7 +470,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     state.sourceIndex = nextSourceIndex;
     state.resumePosition = 0;
     closeOptionDropdowns();
-    if (state.started) {
+    if (state.started || context.autoplay) {
       updateChrome();
       startPlayback();
       return;
@@ -471,7 +484,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     state.sourceIndex = nextSourceIndex;
     state.resumePosition = 0;
     closeOptionDropdowns();
-    if (state.started) {
+    if (state.started || context.autoplay) {
       updateChrome();
       startPlayback();
       return;
@@ -504,7 +517,10 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   episodeTabs.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-episode-index]");
     if (!button) return;
-    selectEpisode(Number(button.dataset.episodeIndex), 0);
+    const nextIndex = Number(button.dataset.episodeIndex);
+    const lineIndex = currentSourceRef()?.lineIndex;
+    const sameLine = (episodes[nextIndex]?.sources || []).findIndex((source) => source.lineIndex === lineIndex);
+    selectEpisode(nextIndex, Math.max(0, sameLine));
   });
 
   sourceChips.addEventListener("click", (event) => {
@@ -521,7 +537,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
 
   stopPlayback();
   updateChrome();
-  prefetchCurrentEpisode();
+  if (context.autoplay) startPlayback();
+  else prefetchCurrentEpisode();
 
   return {
     refreshEpisodeMap,
@@ -567,7 +584,7 @@ async function fetchSourcePlay(playApi) {
   );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || `播放解析失败: ${response.status}`);
+    throw apiError(payload, `播放解析失败: ${response.status}`);
   }
   if (!payload.url) {
     throw new Error(payload.error || "未获取到可播放地址");

@@ -2,17 +2,24 @@ package com.anime.standalone;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.Dialog;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -48,6 +55,98 @@ public class MediaSnifferPlugin extends Plugin {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ArrayDeque<PluginCall> queue = new ArrayDeque<>();
     private int active = 0;
+
+    private Dialog verifyDialog;
+
+    @PluginMethod
+    public void cookies(PluginCall call) {
+        String url = call.getString("url", "");
+        String cookie = url == null || url.isEmpty() ? null : CookieManager.getInstance().getCookie(url);
+        JSObject result = new JSObject();
+        result.put("cookie", cookie == null ? "" : cookie);
+        call.resolve(result);
+    }
+
+    // Shows the site full screen so the user can pass its captcha; the cookies it
+    // issues land in the shared CookieManager that rule requests read from.
+    @PluginMethod
+    public void verify(PluginCall call) {
+        String url = call.getString("url", "");
+        if (url == null || !url.matches("(?i)^https?://.+")) {
+            call.reject("验证地址无效");
+            return;
+        }
+        String userAgent = call.getString("userAgent", "");
+        main.post(() -> showVerifyDialog(call, url, userAgent));
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void showVerifyDialog(PluginCall call, String url, String userAgent) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("应用界面不可用");
+            return;
+        }
+        if (verifyDialog != null && verifyDialog.isShowing()) verifyDialog.dismiss();
+
+        float density = activity.getResources().getDisplayMetrics().density;
+        LinearLayout layout = new LinearLayout(activity);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setBackgroundColor(Color.WHITE);
+
+        LinearLayout bar = new LinearLayout(activity);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        int pad = (int) (12 * density);
+        bar.setPadding(pad, pad, pad, pad);
+        bar.setBackgroundColor(Color.parseColor("#F3F5F8"));
+
+        TextView title = new TextView(activity);
+        title.setText("完成网页里的验证后点「完成」");
+        title.setTextColor(Color.parseColor("#0F172A"));
+        title.setTextSize(15);
+        bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button done = new Button(activity);
+        done.setText("完成");
+        bar.addView(done, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        layout.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        WebView view = new WebView(activity);
+        WebSettings settings = view.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setUserAgentString(
+            userAgent != null && !userAgent.isEmpty()
+                ? userAgent
+                : settings.getUserAgentString().replace("; wv", "")
+        );
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
+        view.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView webView, WebResourceRequest request) {
+                String scheme = request.getUrl().getScheme();
+                return scheme == null || !(scheme.equals("http") || scheme.equals("https"));
+            }
+        });
+        layout.addView(view, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        Dialog dialog = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        dialog.setContentView(layout);
+        dialog.setOnDismissListener((ignored) -> {
+            CookieManager.getInstance().flush();
+            view.stopLoading();
+            view.destroy();
+            if (verifyDialog == dialog) verifyDialog = null;
+            call.resolve();
+        });
+        done.setOnClickListener((ignored) -> dialog.dismiss());
+        verifyDialog = dialog;
+        dialog.show();
+        view.loadUrl(url);
+    }
 
     @PluginMethod
     public void sniff(PluginCall call) {
