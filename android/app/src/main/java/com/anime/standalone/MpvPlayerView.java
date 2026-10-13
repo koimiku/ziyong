@@ -27,7 +27,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import dev.jdtech.mpv.MPVLib;
+import dev.jdtech.MPVLib.MPVLib;
 import java.util.Locale;
 
 // libmpv video surface plus Kazumi-style controls: tap toggles the bars, double tap
@@ -78,7 +78,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     private final Runnable hideControlsTask = this::hideControls;
     private final Runnable hideHintTask = () -> this.hintView.setVisibility(View.GONE);
 
-    private MPVLib mpv;
+    private boolean ready;
     private Surface surface;
     private String pendingUrl;
     private boolean loading;
@@ -252,49 +252,49 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     public boolean start() {
         try {
-            mpv = MPVLib.create(getContext().getApplicationContext());
-            mpv.setOptionString("vo", "gpu");
-            mpv.setOptionString("gpu-context", "android");
-            mpv.setOptionString("opengl-es", "yes");
-            mpv.setOptionString("hwdec", "mediacodec-copy");
-            mpv.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
-            mpv.setOptionString("ao", "audiotrack,opensles");
-            mpv.setOptionString("tls-verify", "no");
-            mpv.setOptionString("cache", "yes");
-            mpv.setOptionString("demuxer-max-bytes", "64MiB");
-            mpv.setOptionString("demuxer-max-back-bytes", "32MiB");
-            mpv.setOptionString("network-timeout", "20");
-            mpv.setOptionString("keep-open", "yes");
-            mpv.setOptionString("input-default-bindings", "no");
-            mpv.setOptionString("ytdl", "no");
-            mpv.init();
-            mpv.setOptionString("force-window", "no");
-            mpv.setOptionString("idle", "yes");
-            mpv.addObserver(this);
-            mpv.observeProperty("time-pos", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE);
-            mpv.observeProperty("duration", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE);
-            mpv.observeProperty("pause", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
-            mpv.observeProperty("paused-for-cache", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
-            mpv.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
+            MPVLib.create(getContext().getApplicationContext());
+            MPVLib.setOptionString("vo", "gpu");
+            MPVLib.setOptionString("gpu-context", "android");
+            MPVLib.setOptionString("opengl-es", "yes");
+            MPVLib.setOptionString("hwdec", "mediacodec-copy");
+            MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
+            MPVLib.setOptionString("ao", "audiotrack,opensles");
+            MPVLib.setOptionString("tls-verify", "no");
+            MPVLib.setOptionString("cache", "yes");
+            MPVLib.setOptionString("demuxer-max-bytes", "64MiB");
+            MPVLib.setOptionString("demuxer-max-back-bytes", "32MiB");
+            MPVLib.setOptionString("network-timeout", "20");
+            MPVLib.setOptionString("keep-open", "yes");
+            MPVLib.setOptionString("input-default-bindings", "no");
+            MPVLib.setOptionString("ytdl", "no");
+            MPVLib.init();
+            MPVLib.setOptionString("force-window", "no");
+            MPVLib.setOptionString("idle", "yes");
+            MPVLib.addObserver(this);
+            MPVLib.observeProperty("time-pos", MPVLib.MPV_FORMAT_DOUBLE);
+            MPVLib.observeProperty("duration", MPVLib.MPV_FORMAT_DOUBLE);
+            MPVLib.observeProperty("pause", MPVLib.MPV_FORMAT_FLAG);
+            MPVLib.observeProperty("paused-for-cache", MPVLib.MPV_FORMAT_FLAG);
+            MPVLib.observeProperty("eof-reached", MPVLib.MPV_FORMAT_FLAG);
+            ready = true;
             return true;
         } catch (Throwable error) {
-            mpv = null;
+            ready = false;
             return false;
         }
     }
 
     public void release() {
         main.removeCallbacksAndMessages(null);
-        MPVLib instance = mpv;
-        mpv = null;
-        if (instance == null) return;
+        if (!ready) return;
+        ready = false;
         try {
-            instance.removeObserver(this);
+            MPVLib.removeObserver(this);
             if (surface != null) {
-                instance.setPropertyString("vo", "null");
-                instance.detachSurface();
+                MPVLib.setPropertyString("vo", "null");
+                MPVLib.detachSurface();
             }
-            instance.destroy();
+            MPVLib.destroy();
         } catch (Throwable ignored) {
             // already gone
         }
@@ -305,7 +305,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     public void load(String url, String userAgent, String referer, String headerFields, double startAt) {
-        if (mpv == null) return;
+        if (!ready) return;
         loading = true;
         awaitingStart = true;
         ended = false;
@@ -317,7 +317,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         setProperty("http-header-fields", headerFields == null ? "" : headerFields);
         setProperty("start", startAt > 1 ? String.format(Locale.US, "%.2f", startAt) : "none");
         try {
-            mpv.setPropertyBoolean("pause", false);
+            MPVLib.setPropertyBoolean("pause", false);
         } catch (Throwable ignored) {
             // set on the next file
         }
@@ -335,12 +335,12 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         position = 0;
         duration = 0;
         restoreSpeed();
-        if (mpv != null) command("stop");
+        if (ready) command("stop");
         updateSpinner();
     }
 
     public void play() {
-        if (mpv == null) return;
+        if (!ready) return;
         if (ended) {
             ended = false;
             command("seek", "0", "absolute");
@@ -353,7 +353,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     public void seekTo(double seconds) {
-        if (mpv == null) return;
+        if (!ready) return;
         double target = duration > 0 ? Math.min(Math.max(0, seconds), Math.max(0, duration - 1)) : Math.max(0, seconds);
         ended = false;
         position = target;
@@ -400,11 +400,11 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
-        if (mpv == null) return;
+        if (!ready) return;
         surface = new Surface(texture);
         try {
-            mpv.attachSurface(surface);
-            mpv.setOptionString("force-window", "yes");
+            MPVLib.attachSurface(surface);
+            MPVLib.setOptionString("force-window", "yes");
             setProperty("android-surface-size", width + "x" + height);
             if (pendingUrl != null) {
                 command("loadfile", pendingUrl);
@@ -424,11 +424,11 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
-        if (mpv != null) {
+        if (ready) {
             try {
                 setProperty("vo", "null");
-                mpv.setOptionString("force-window", "no");
-                mpv.detachSurface();
+                MPVLib.setOptionString("force-window", "no");
+                MPVLib.detachSurface();
             } catch (Throwable ignored) {
                 // instance is shutting down
             }
@@ -462,7 +462,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
             lastTimePost = now;
         }
         main.post(() -> {
-            if (mpv == null) return;
+            if (!ready) return;
             if ("time-pos".equals(name)) {
                 if (gestureMode != GESTURE_SEEK) position = value;
             } else if ("duration".equals(name)) {
@@ -476,7 +476,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     @Override
     public void eventProperty(String name, boolean value) {
         main.post(() -> {
-            if (mpv == null) return;
+            if (!ready) return;
             switch (name) {
                 case "pause":
                     paused = value;
@@ -511,15 +511,15 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     @Override
     public void event(int id) {
         main.post(() -> {
-            if (mpv == null) return;
-            if (id == MPVLib.MpvEvent.MPV_EVENT_START_FILE) {
+            if (!ready) return;
+            if (id == MPVLib.MPV_EVENT_START_FILE) {
                 awaitingStart = false;
-            } else if (id == MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED) {
+            } else if (id == MPVLib.MPV_EVENT_FILE_LOADED) {
                 if (!loading) return;
                 loading = false;
                 Double length = null;
                 try {
-                    length = mpv.getPropertyDouble("duration");
+                    length = MPVLib.getPropertyDouble("duration");
                 } catch (Throwable ignored) {
                     // live or unknown length
                 }
@@ -527,12 +527,12 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
                 updateProgressViews();
                 updateSpinner();
                 listener.onLoaded(duration);
-            } else if (id == MPVLib.MpvEvent.MPV_EVENT_END_FILE) {
+            } else if (id == MPVLib.MPV_EVENT_END_FILE) {
                 if (!loading || awaitingStart) return;
                 loading = false;
                 updateSpinner();
                 listener.onLoadFailed("视频加载失败，请换片源");
-            } else if (id == MPVLib.MpvEvent.MPV_EVENT_PLAYBACK_RESTART) {
+            } else if (id == MPVLib.MPV_EVENT_PLAYBACK_RESTART) {
                 buffering = false;
                 updateSpinner();
             }
@@ -632,9 +632,9 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void setPause(boolean value) {
-        if (mpv == null) return;
+        if (!ready) return;
         try {
-            mpv.setPropertyBoolean("pause", value);
+            MPVLib.setPropertyBoolean("pause", value);
         } catch (Throwable ignored) {
             // no file loaded
         }
@@ -659,9 +659,9 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void setMpvSpeed(float value) {
-        if (mpv == null) return;
+        if (!ready) return;
         try {
-            mpv.setPropertyDouble("speed", value);
+            MPVLib.setPropertyDouble("speed", (double) value);
         } catch (Throwable ignored) {
             // no file loaded
         }
@@ -754,18 +754,18 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void setProperty(String name, String value) {
-        if (mpv == null) return;
+        if (!ready) return;
         try {
-            mpv.setPropertyString(name, value);
+            MPVLib.setPropertyString(name, value);
         } catch (Throwable ignored) {
             // unsupported in this build
         }
     }
 
     private void command(String... args) {
-        if (mpv == null) return;
+        if (!ready) return;
         try {
-            mpv.command(args);
+            MPVLib.command(args);
         } catch (Throwable ignored) {
             // rejected by mpv
         }
