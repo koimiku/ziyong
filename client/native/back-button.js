@@ -22,6 +22,12 @@ export function initializeAndroidBackButton() {
 }
 
 function handleAndroidBack(App) {
+  const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fullscreen) {
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    return;
+  }
+
   if (document.body.classList.contains("app-update-open")) {
     document.querySelector("#appUpdateBackdrop")?.classList.remove("is-open");
     document.querySelector("#appUpdateDialog")?.classList.remove("is-open");

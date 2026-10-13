@@ -7,6 +7,7 @@ import {
   normalizeRule,
   resolveRulePlay,
   ruleFileName,
+  ruleNeedsRefresh,
   ruleRawUrl,
   searchRule,
   seedDefaultRules,
@@ -83,9 +84,19 @@ export async function ensureKazumiReady(root = appRoot) {
           console.warn(`[kazumi] load failed: ${file}`, error?.message || error);
         }
       }
+      refreshIncompleteRules();
     });
   }
   return readyPromise;
+}
+
+function refreshIncompleteRules() {
+  for (const rule of rules.values()) {
+    if (!ruleNeedsRefresh(rule)) continue;
+    installKazumiRule(rule.name).catch((error) => {
+      console.warn(`[kazumi] refresh failed: ${rule.name}`, error?.message || error);
+    });
+  }
 }
 
 export function getKazumiRule(name) {

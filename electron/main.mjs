@@ -7,6 +7,7 @@ import { setMediaSniffer } from "../server/media-sniffer.mjs";
 import { setSiteCookieProvider } from "../server/site-cookies.mjs";
 import { createMediaSniffer, SNIFFER_PARTITION } from "./media-sniffer.mjs";
 import { createSiteVerifier } from "./site-verify.mjs";
+import { createCaptchaPages } from "./captcha-page.mjs";
 
 const APP_PORT = Number(process.env.PORT || process.env.ANIME_PORT || 47890);
 const ELECTRON_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -191,6 +192,10 @@ app.whenReady().then(() => {
   const siteVerifier = createSiteVerifier(session.fromPartition(SNIFFER_PARTITION));
   setSiteCookieProvider(siteVerifier.cookieHeader);
   ipcMain.handle("site:verify", (_event, options) => siteVerifier.open(mainWindow, options));
+  const captchaPages = createCaptchaPages(session.fromPartition(SNIFFER_PARTITION));
+  ipcMain.handle("captcha:open", (_event, options) => captchaPages.open(options));
+  ipcMain.handle("captcha:eval", (_event, options) => captchaPages.evaluate(options));
+  ipcMain.handle("captcha:close", (_event, options) => captchaPages.close(options));
 
   createWindow().catch((error) => {
     console.error(error);

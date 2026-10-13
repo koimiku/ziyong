@@ -5,6 +5,7 @@ import {
   normalizeRule,
   resolveRulePlay,
   ruleFileName,
+  ruleNeedsRefresh,
   ruleRawUrl,
   searchRule,
   seedDefaultRules,
@@ -49,6 +50,12 @@ export async function ensureKazumiReady() {
         } catch (error) {
           console.warn(`[kazumi] load failed: ${name}`, error?.message || error);
         }
+      }
+      for (const rule of rules.values()) {
+        if (!ruleNeedsRefresh(rule)) continue;
+        installKazumiRule(rule.name).catch((error) => {
+          console.warn(`[kazumi] refresh failed: ${rule.name}`, error?.message || error);
+        });
       }
     });
   }

@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ApkUpdaterPlugin.class);
         registerPlugin(MediaSnifferPlugin.class);
         super.onCreate(savedInstanceState);
+        bridge.getWebView().setWebChromeClient(new FullscreenChromeClient(bridge));
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
 
         boolean night =

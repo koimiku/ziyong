@@ -245,6 +245,12 @@ export function apiError(payload, fallback) {
     error.code = payload.code;
     error.verifyUrl = payload.verifyUrl || "";
     error.userAgent = payload.userAgent || "";
+    error.verify = {
+      verifyUrl: error.verifyUrl,
+      userAgent: error.userAgent,
+      sourceName: payload.sourceName || "",
+      captcha: payload.captcha || null,
+    };
   }
   return error;
 }

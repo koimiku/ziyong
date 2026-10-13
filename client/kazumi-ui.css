@@ -431,3 +431,175 @@ body { background: var(--bg); }
     color: var(--m3-on-secondary-container);
   }
 }
+
+/* Site verification dialog (Kazumi's captcha flow) */
+.kz-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .32);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.kz-dialog-scrim.is-open { opacity: 1; }
+.kz-dialog-scrim.is-closing { opacity: 0; }
+.kz-dialog {
+  box-sizing: border-box;
+  width: min(100%, 420px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px 24px 16px;
+  border-radius: 28px;
+  background: var(--m3-container-high);
+  color: var(--ink);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .22);
+  transform: scale(.92);
+  transition: transform 260ms cubic-bezier(.05, .7, .1, 1);
+}
+.kz-dialog-scrim.is-open .kz-dialog { transform: none; }
+.kz-dialog-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.kz-dialog-source svg { width: 20px; height: 20px; fill: currentColor; }
+.kz-dialog-title {
+  margin: 16px 0 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
+}
+.kz-dialog-desc {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+.kz-dialog-body { display: grid; margin-top: 24px; }
+.kz-dialog-body:empty { margin-top: 8px; }
+.kz-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.kz-text-button,
+.kz-filled-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kz-text-button { min-width: 72px; background: transparent; color: var(--accent); }
+.kz-text-button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.kz-text-button svg { width: 18px; height: 18px; fill: currentColor; }
+.kz-filled-button { min-width: 88px; padding: 0 24px; background: var(--accent); color: #fff; }
+[data-theme="dark"] .kz-filled-button { color: #1b1a3d; }
+.kz-filled-button:hover:not(:disabled) { filter: brightness(1.08); }
+.kz-text-button:disabled,
+.kz-filled-button:disabled { cursor: default; opacity: .38; }
+.kz-filled-button:disabled { background: color-mix(in srgb, var(--ink) 12%, transparent); color: var(--ink); }
+
+.kz-captcha-box {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 128px;
+  padding: 16px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--m3-container-high));
+  color: var(--ink);
+  font-size: 14px;
+  text-align: center;
+}
+[data-theme="dark"] .kz-captcha-box { background: color-mix(in srgb, #fff 6%, var(--m3-container-high)); }
+.kz-captcha-image {
+  display: block;
+  max-width: 100%;
+  height: 88px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+.kz-captcha-error svg { width: 24px; height: 24px; fill: var(--muted); }
+.kz-captcha-tools { display: flex; justify-content: flex-end; margin: 4px 0; }
+.kz-field {
+  position: relative;
+  display: block;
+  margin-top: 8px;
+}
+.kz-field-label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 4px;
+  background: var(--m3-container-high);
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 16px;
+}
+.kz-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 56px;
+  padding: 0 16px;
+  border: 1px solid var(--m3-outline);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+.kz-field input:focus { border: 2px solid var(--accent); padding: 0 15px; }
+.kz-field.has-error .kz-field-label { color: #ba1a1a; }
+.kz-field.has-error input { border: 2px solid #ba1a1a; padding: 0 15px; }
+.kz-field-error { margin: 4px 16px 0; color: #ba1a1a; font-size: 12px; }
+[data-theme="dark"] .kz-field.has-error .kz-field-label,
+[data-theme="dark"] .kz-field-error { color: #ffb4ab; }
+[data-theme="dark"] .kz-field.has-error input { border-color: #ffb4ab; }
+.kz-auto-box { display: grid; place-items: center; padding: 16px 0 8px; }
+.kz-success-box { display: grid; place-items: center; padding-bottom: 8px; }
+.kz-success-badge {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--m3-secondary-container);
+  color: var(--m3-on-secondary-container);
+  animation: kz-pop 320ms cubic-bezier(.05, .7, .1, 1);
+}
+.kz-success-badge svg { width: 32px; height: 32px; fill: currentColor; }
+.kz-spinner {
+  display: inline-block;
+  width: var(--size, 40px);
+  height: var(--size, 40px);
+  border: calc(var(--size, 40px) / 10) solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: kz-spin 900ms linear infinite;
+}
+@keyframes kz-spin { to { transform: rotate(360deg); } }
+@keyframes kz-pop { from { transform: scale(.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .kz-dialog, .kz-success-badge { transition: none; animation: none; }
+}

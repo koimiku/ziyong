@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   detailRule,
+  errorPayload,
   normalizeRule,
+  ruleNeedsRefresh,
   queryXPath,
   readJsonPath,
   resolveRulePlay,
@@ -172,6 +174,35 @@ test("a captcha wall is reported as a verification request", async () => {
     }),
     (error) => error.code === "captcha"
   );
+});
+
+test("a verification request carries the rule's captcha config", async () => {
+  setHtmlParser(parseHtmlWithCheerio);
+  const rule = normalizeRule({
+    ...xpathRule,
+    baseURL: xpathRule.baseUrl,
+    antiCrawlerConfig: {
+      enabled: true,
+      captchaType: 1,
+      captchaImage: "//img[@class='ds-verify-img']",
+      captchaInput: "//input[@name='verify']",
+      captchaButton: "//button[contains(@class, 'verify-submit')]",
+    },
+  });
+  const wall = `<div><img class="ds-verify-img" src="/verify/index.html" /><input name="verify" /></div>`;
+  const error = await searchRule(rule, "示例", async () => wall).catch((caught) => caught);
+  const payload = errorPayload(error);
+  assert.equal(payload.code, "captcha");
+  assert.equal(payload.sourceName, rule.name);
+  assert.deepEqual(payload.captcha, {
+    type: 1,
+    image: "//img[@class='ds-verify-img']",
+    input: "//input[@name='verify']",
+    button: "//button[contains(@class, 'verify-submit')]",
+    script: "",
+  });
+  assert.equal(ruleNeedsRefresh(rule), false);
+  assert.equal(ruleNeedsRefresh({ antiCrawlerConfig: { enabled: true } }), true);
 });
 
 test("an ordinary empty result page is not treated as a captcha", async () => {

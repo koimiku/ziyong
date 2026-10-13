@@ -451,8 +451,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     playStartButton.querySelector("strong").textContent = "重试";
     if (isVerifyError(lastError)) {
       playerFrame.classList.add("needs-verify");
-      playerFrame.dataset.verifyUrl = lastError.verifyUrl;
-      playerFrame.dataset.verifyUa = lastError.userAgent;
+      playerFrame.dataset.verify = JSON.stringify(lastError.verify || {});
       playStartHint.textContent = "该网站需要先完成验证，验证后点重试";
     } else {
       playStartHint.textContent = `${(lastError?.message || "解析失败").replace(/，请换.*$/, "")}，可以重试或更换片源`;

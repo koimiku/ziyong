@@ -299,8 +299,7 @@ function startWatchFlow({ page, item, requestId, sources, queries, preset }) {
 
   async function runVerification(verify) {
     try {
-      await verifySite(verify);
-      return isCurrent();
+      return (await verifySite(verify)) && isCurrent();
     } catch (error) {
       console.warn("site verify", error);
       return false;
@@ -350,7 +349,7 @@ function startWatchFlow({ page, item, requestId, sources, queries, preset }) {
         sheet.update(source.id, {
           state: "verify",
           matches: [],
-          verify: { verifyUrl: error.verifyUrl, userAgent: error.userAgent },
+          verify: error.verify,
         });
       } else {
         sheet.update(source.id, { state: "error", matches: [], error: describeSourceError(error) });
@@ -380,7 +379,7 @@ function startWatchFlow({ page, item, requestId, sources, queries, preset }) {
       if (!isVerifyError(error)) throw error;
       const verifiable = canVerifySite();
       pendingVerify = {
-        verify: { verifyUrl: error.verifyUrl, userAgent: error.userAgent },
+        verify: error.verify,
         retry: () => openSource(source, match),
       };
       sourceSection.innerHTML = renderPlayerPlaceholder(
@@ -471,7 +470,12 @@ function startWatchFlow({ page, item, requestId, sources, queries, preset }) {
   async function handleSiteVerify() {
     const frame = page.querySelector("#playerFrame");
     if (frame?.classList.contains("needs-verify")) {
-      const verify = { verifyUrl: frame.dataset.verifyUrl, userAgent: frame.dataset.verifyUa };
+      let verify = {};
+      try {
+        verify = JSON.parse(frame.dataset.verify || "{}");
+      } catch {
+        verify = {};
+      }
       if (await runVerification(verify)) page.querySelector("#playStartButton")?.click();
       return;
     }

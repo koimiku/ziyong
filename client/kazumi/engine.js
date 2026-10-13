@@ -138,6 +138,8 @@ export function errorPayload(error) {
     payload.code = CAPTCHA_ERROR;
     payload.verifyUrl = error.verifyUrl || "";
     payload.userAgent = error.userAgent || "";
+    payload.sourceName = error.sourceName || "";
+    if (error.captcha) payload.captcha = error.captcha;
   }
   return payload;
 }
@@ -316,6 +318,34 @@ function normalizeAntiCrawler(config) {
     captchaButton: String(source.captchaButton || ""),
     captchaDetectType: Number(source.captchaDetectType || 1),
     captchaDetectValue: String(source.captchaDetectValue || ""),
+    captchaScript: String(source.captchaScript || ""),
+  };
+}
+
+// Rules saved before the full anti-crawler config was kept only have `enabled`;
+// they need a fresh copy before verification can drive the site's captcha.
+export function ruleNeedsRefresh(rule) {
+  const config = rule?.antiCrawlerConfig;
+  return Boolean(
+    config?.enabled && !config.captchaImage && !config.captchaButton && !config.captchaScript
+  );
+}
+
+function captchaConfig(rule) {
+  const config = rule.antiCrawlerConfig || {};
+  if (!config.enabled) return null;
+  const type = Number(config.captchaType || 1);
+  const usable =
+    (type === 1 && config.captchaImage && config.captchaInput && config.captchaButton) ||
+    (type === 2 && config.captchaButton) ||
+    (type === 3 && config.captchaScript);
+  if (!usable) return null;
+  return {
+    type,
+    image: config.captchaImage,
+    input: config.captchaInput,
+    button: config.captchaButton,
+    script: config.captchaScript,
   };
 }
 
@@ -564,6 +594,8 @@ function captchaRequired(rule, verifyUrl) {
   error.code = CAPTCHA_ERROR;
   error.verifyUrl = verifyUrl || rule.baseUrl || "";
   error.userAgent = rule.userAgent || DEFAULT_UA;
+  error.sourceName = rule.name || "";
+  error.captcha = captchaConfig(rule);
   return error;
 }
 
@@ -575,9 +607,19 @@ function needsVerification(rule, raw) {
   const config = rule.antiCrawlerConfig || {};
   if (config.enabled) {
     const detect = config.captchaDetectValue.trim();
+    const detectType = Number(config.captchaDetectType || 1);
+    if (detect && detectType === 2 && text.includes(detect)) return true;
+    if (detect && detectType === 3) {
+      try {
+        if (new RegExp(detect).test(text)) return true;
+      } catch {
+        // An invalid pattern in a rule just disables this probe.
+      }
+    }
     const probes = [
-      detect.startsWith("/") ? detect : "",
-      /verify|captcha/i.test(config.captchaImage) ? config.captchaImage : "",
+      detect && detectType === 1 && detect.startsWith("/") ? detect : "",
+      config.captchaImage.startsWith("/") ? config.captchaImage : "",
+      config.captchaType === 2 && config.captchaButton.startsWith("/") ? config.captchaButton : "",
     ].filter(Boolean);
     if (probes.length) {
       let root = null;

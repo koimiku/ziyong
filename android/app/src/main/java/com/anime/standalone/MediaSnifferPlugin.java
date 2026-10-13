@@ -57,6 +57,8 @@ public class MediaSnifferPlugin extends Plugin {
     private int active = 0;
 
     private Dialog verifyDialog;
+    private final Map<String, WebView> captchaPages = new HashMap<>();
+    private int captchaSeq = 0;
 
     @PluginMethod
     public void cookies(PluginCall call) {
@@ -146,6 +148,120 @@ public class MediaSnifferPlugin extends Plugin {
         verifyDialog = dialog;
         dialog.show();
         view.loadUrl(url);
+    }
+
+    // Hidden pages for Kazumi-style verification; the web layer drives them with scripts.
+    @PluginMethod
+    public void captchaOpen(PluginCall call) {
+        String url = call.getString("url", "");
+        if (url == null || !url.matches("(?i)^https?://.+")) {
+            call.reject("验证地址无效");
+            return;
+        }
+        String userAgent = call.getString("userAgent", "");
+        main.post(() -> openCaptchaPage(call, url, userAgent));
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void openCaptchaPage(PluginCall call, String url, String userAgent) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("应用界面不可用");
+            return;
+        }
+        clearSiteCookies(url);
+        WebView view;
+        try {
+            view = new WebView(activity);
+        } catch (Exception error) {
+            call.reject("无法创建验证页面");
+            return;
+        }
+        WebSettings settings = view.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setUserAgentString(
+            userAgent != null && !userAgent.isEmpty()
+                ? userAgent
+                : settings.getUserAgentString().replace("; wv", "")
+        );
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
+        view.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView webView, WebResourceRequest request) {
+                String scheme = request.getUrl().getScheme();
+                return scheme == null || !(scheme.equals("http") || scheme.equals("https"));
+            }
+        });
+        view.setAlpha(0f);
+        ViewGroup root = activity.findViewById(android.R.id.content);
+        if (root != null) root.addView(view, new FrameLayout.LayoutParams(1, 1));
+
+        String id = String.valueOf(++captchaSeq);
+        captchaPages.put(id, view);
+        view.loadUrl(url);
+        JSObject result = new JSObject();
+        result.put("id", id);
+        call.resolve(result);
+    }
+
+    private void clearSiteCookies(String url) {
+        CookieManager manager = CookieManager.getInstance();
+        String cookie = manager.getCookie(url);
+        if (cookie == null || cookie.isEmpty()) return;
+        String host = Uri.parse(url).getHost();
+        for (String part : cookie.split(";")) {
+            int eq = part.indexOf('=');
+            String name = (eq >= 0 ? part.substring(0, eq) : part).trim();
+            if (name.isEmpty()) continue;
+            String expired = name + "=; Max-Age=0; Path=/";
+            manager.setCookie(url, expired);
+            if (host != null) manager.setCookie(url, expired + "; Domain=" + host);
+        }
+        manager.flush();
+    }
+
+    @PluginMethod
+    public void captchaEval(PluginCall call) {
+        String id = call.getString("id", "");
+        String script = call.getString("script", "");
+        main.post(() -> {
+            WebView view = captchaPages.get(id);
+            if (view == null) {
+                call.reject("验证页面已关闭");
+                return;
+            }
+            view.evaluateJavascript(script, (raw) -> {
+                JSObject result = new JSObject();
+                Object value = null;
+                try {
+                    value = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
+                } catch (Exception ignored) {
+                    value = null;
+                }
+                result.put("value", value == org.json.JSONObject.NULL ? null : value);
+                call.resolve(result);
+            });
+        });
+    }
+
+    @PluginMethod
+    public void captchaClose(PluginCall call) {
+        String id = call.getString("id", "");
+        main.post(() -> {
+            WebView view = captchaPages.remove(id);
+            if (view != null) {
+                view.stopLoading();
+                ViewGroup parent = (ViewGroup) view.getParent();
+                if (parent != null) parent.removeView(view);
+                view.destroy();
+            }
+            CookieManager.getInstance().flush();
+            call.resolve();
+        });
     }
 
     @PluginMethod
