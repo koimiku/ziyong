@@ -76,7 +76,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     private final GestureDetector gestures;
     private final int touchSlop;
     private final Runnable hideControlsTask = this::hideControls;
-    private final Runnable hideHintTask = () -> this.hintView.setVisibility(View.GONE);
+    private final Runnable hideHintTask;
 
     private boolean ready;
     private Surface surface;
@@ -119,6 +119,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         addView(spinner, new LayoutParams(dp(42), dp(42), Gravity.CENTER));
 
         hintView = new TextView(activity);
+        hideHintTask = () -> hintView.setVisibility(View.GONE);
         hintView.setTextColor(Color.WHITE);
         hintView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         hintView.setPadding(dp(14), dp(7), dp(14), dp(7));
