@@ -3,9 +3,12 @@ import { getContentMode } from "./content-mode.js";
 import { isTokusatsuItem } from "./tokusatsu.js";
 import { getBestMatchScore, normalizeText, pickDisplayTitle } from "./utils.js";
 
-let miruSources = [];
 let kazumiSources = [];
 let watchSourceRefresh = null;
+let defaultSourcesPromise = null;
+
+const DEFAULT_SOURCES_WAIT_MS = 15000;
+const SOURCE_SEARCH_TIMEOUT_MS = 15000;
 
 function sourceMatchesMode(source) {
   const mode = getContentMode();
@@ -15,7 +18,7 @@ function sourceMatchesMode(source) {
 }
 
 export function getWatchSources() {
-  return [...builtinSources, ...miruSources, ...kazumiSources].filter(sourceMatchesMode);
+  return [...builtinSources, ...kazumiSources].filter(sourceMatchesMode);
 }
 
 export function getSourceNamesText() {
@@ -33,38 +36,36 @@ export async function refreshWatchSources() {
   return watchSourceRefresh;
 }
 
-async function loadWatchSources() {
-  const [miruResult, kazumiResult] = await Promise.allSettled([
-    fetch("/api/miru/sources").then(async (response) => {
-      if (!response.ok) throw new Error(`Miru sources failed: ${response.status}`);
-      return response.json();
-    }),
-    fetch("/api/kazumi/sources").then(async (response) => {
-      if (!response.ok) throw new Error(`Kazumi sources failed: ${response.status}`);
-      return response.json();
-    }),
-  ]);
-
-  if (miruResult.status === "fulfilled") {
-    miruSources = (miruResult.value.list || []).map((item) => ({
-      id: item.id,
-      name: `${item.name} · Miru`,
-      kind: "online",
-      miru: true,
-      package: item.package,
-      webSite: item.webSite || "",
-      searchUrl: (title) =>
-        item.webSite
-          ? `${String(item.webSite).replace(/\/$/, "")}/?q=${encodeURIComponent(title)}`
-          : "#",
-    }));
-  } else {
-    console.warn(miruResult.reason);
-    miruSources = [];
+export function ensureDefaultSources() {
+  if (!defaultSourcesPromise) {
+    document.dispatchEvent(new CustomEvent("anime:sources-seeding", { detail: { done: false } }));
+    defaultSourcesPromise = fetch("/api/kazumi/seed", { method: "POST" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || `Kazumi seed failed: ${response.status}`);
+        if (payload.installed) await refreshWatchSources();
+        return payload;
+      })
+      .catch((error) => {
+        console.warn("[kazumi] default rules", error);
+        return null;
+      })
+      .then((payload) => {
+        document.dispatchEvent(
+          new CustomEvent("anime:sources-seeding", { detail: { done: true, result: payload } })
+        );
+        return payload;
+      });
   }
+  return defaultSourcesPromise;
+}
 
-  if (kazumiResult.status === "fulfilled") {
-    kazumiSources = (kazumiResult.value.list || []).map((item) => ({
+async function loadWatchSources() {
+  try {
+    const response = await fetch("/api/kazumi/sources");
+    if (!response.ok) throw new Error(`Kazumi sources failed: ${response.status}`);
+    const payload = await response.json();
+    kazumiSources = (payload.list || []).map((item) => ({
       id: item.id,
       name: `${item.name} · 规则`,
       kind: "online",
@@ -76,62 +77,51 @@ async function loadWatchSources() {
           ? `${String(item.baseUrl).replace(/\/$/, "")}/?q=${encodeURIComponent(title)}`
           : "#",
     }));
-  } else {
-    console.warn(kazumiResult.reason);
+  } catch (error) {
+    console.warn(error);
     kazumiSources = [];
   }
 
   return getWatchSources();
 }
 
-export async function fetchWatchSourceMatches(item) {
+export async function prepareWatchSearch(item) {
+  if (defaultSourcesPromise) {
+    await Promise.race([
+      defaultSourcesPromise,
+      new Promise((resolve) => setTimeout(resolve, DEFAULT_SOURCES_WAIT_MS)),
+    ]);
+  }
   await (watchSourceRefresh || refreshWatchSources());
+  const queries = getSourceQueryCandidates(item);
   const tokuzillaSlug =
     item.tokuzillaSlug || (String(item.id || "").startsWith("tz:") ? String(item.id).slice(3) : "");
   if (tokuzillaSlug && isTokusatsuItem(item)) {
     const source = getWatchSources().find((entry) => entry.id === "tokuzilla");
     if (source) {
-      return [
-        {
-          source,
-          matches: [
-            {
-              id: tokuzillaSlug,
-              name: pickDisplayTitle(item),
-              url: item.sourceUrl || `https://tokuzilla.net/watch/${tokuzillaSlug}.html`,
-              matchScore: 100,
-            },
+      return {
+        sources: [source],
+        queries,
+        preset: new Map([
+          [
+            source.id,
+            [
+              {
+                id: tokuzillaSlug,
+                name: pickDisplayTitle(item),
+                url: item.sourceUrl || `https://tokuzilla.net/watch/${tokuzillaSlug}.html`,
+                matchScore: 100,
+              },
+            ],
           ],
-          error: null,
-        },
-      ];
+        ]),
+      };
     }
   }
-
-  const queries = getSourceQueryCandidates(item);
-  const results = await Promise.all(
-    getWatchSources().map(async (source) => {
-      try {
-        const matches = await searchWatchSource(source, queries);
-        return {
-          source,
-          matches,
-          error: null,
-        };
-      } catch (error) {
-        console.warn(error);
-        return {
-          source,
-          matches: [],
-          error,
-        };
-      }
-    })
-  );
-  return results;
+  return { sources: getWatchSources(), queries, preset: new Map() };
 }
 
-function getSourceQueryCandidates(item) {
+export function getSourceQueryCandidates(item) {
   return [
     ...new Set(
       [pickDisplayTitle(item), item.title_cn, item.title, ...(item.aliases || [])]
@@ -141,11 +131,28 @@ function getSourceQueryCandidates(item) {
   ].slice(0, 3);
 }
 
-async function searchWatchSource(source, queries) {
+export function searchSourceForItem(source, queries, { minScore = 70 } = {}) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("检索超时")), SOURCE_SEARCH_TIMEOUT_MS);
+  });
+  return Promise.race([searchWatchSource(source, queries, minScore), timeout]).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
+async function searchWatchSource(source, queries, minScore) {
   const collected = new Map();
 
+  // Main title first; aliases only when it yields nothing usable.
   for (const query of queries) {
-    const payload = await fetchSourceSearch(source.id, query);
+    let payload;
+    try {
+      payload = await fetchSourceSearch(source.id, query);
+    } catch (error) {
+      if (!collected.size) throw error;
+      break;
+    }
     (payload.list || []).forEach((entry) => {
       if (!entry?.id || !entry?.name || !entry?.url) return;
       const current = collected.get(entry.id);
@@ -157,10 +164,11 @@ async function searchWatchSource(source, queries) {
         });
       }
     });
+    if ([...collected.values()].some((entry) => entry.matchScore >= minScore)) break;
   }
 
   return [...collected.values()]
-    .filter((entry) => entry.matchScore >= 70)
+    .filter((entry) => entry.matchScore >= minScore)
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 4);
 }
@@ -177,19 +185,52 @@ function scoreSourceTitle(query, title) {
   return base;
 }
 
+// Browsers allow ~6 connections per host; without ordering, a long tail of rule
+// searches blocks the detail request that would let the player mount.
+const MAX_SOURCE_REQUESTS = 5;
+const requestQueue = [];
+let activeRequests = 0;
+
+function scheduleSourceRequest(priority, task) {
+  return new Promise((resolve, reject) => {
+    requestQueue.push({ priority, task, resolve, reject });
+    requestQueue.sort((a, b) => a.priority - b.priority);
+    pumpSourceRequests();
+  });
+}
+
+function pumpSourceRequests() {
+  while (activeRequests < MAX_SOURCE_REQUESTS && requestQueue.length) {
+    const job = requestQueue.shift();
+    activeRequests += 1;
+    Promise.resolve()
+      .then(job.task)
+      .then(job.resolve, job.reject)
+      .finally(() => {
+        activeRequests -= 1;
+        pumpSourceRequests();
+      });
+  }
+}
+
+function searchPriority(sourceId) {
+  return String(sourceId).startsWith("kazumi:") ? 2 : 1;
+}
+
 export async function fetchSourceSearch(sourceId, query) {
-  const response = await fetch(
-    `/api/source-search?source=${encodeURIComponent(sourceId)}&q=${encodeURIComponent(query)}`
+  const response = await scheduleSourceRequest(searchPriority(sourceId), () =>
+    fetch(`/api/source-search?source=${encodeURIComponent(sourceId)}&q=${encodeURIComponent(query)}`)
   );
   if (!response.ok) {
-    throw new Error(`Source search failed: ${sourceId} ${response.status}`);
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `Source search failed: ${sourceId} ${response.status}`);
   }
   return response.json();
 }
 
 export async function fetchSourceDetail(sourceId, id) {
-  const response = await fetch(
-    `/api/source-detail?source=${encodeURIComponent(sourceId)}&id=${encodeURIComponent(id)}`
+  const response = await scheduleSourceRequest(0, () =>
+    fetch(`/api/source-detail?source=${encodeURIComponent(sourceId)}&id=${encodeURIComponent(id)}`)
   );
   if (!response.ok) {
     throw new Error(`Source detail failed: ${sourceId} ${response.status}`);
@@ -197,95 +238,32 @@ export async function fetchSourceDetail(sourceId, id) {
   return response.json();
 }
 
-export async function loadSourcePlaylists(sourceResults) {
-  const playlists = await Promise.all(
-    sourceResults.map(async ({ source, matches }) => {
-      const candidates = (matches || []).filter((match) => match.matchScore >= 70);
-      for (const match of candidates.slice(0, 6)) {
-        try {
-          const detail = await fetchSourceDetail(source.id, match.id);
-          if (!detail.lines?.length) continue;
-          return {
-            sourceId: source.id,
-            sourceName: source.name,
-            matchName: match.name,
-            matchUrl: match.url,
-            matchScore: match.matchScore,
-            kind: source.kind || "online",
-            speedRank: source.kazumi
-              ? 6
-              : source.miru
-              ? 5
-              : source.id === "tokuzilla"
-                ? 0
-                : source.id === "xfdm"
-                  ? 1
-                  : source.id === "xgcartoon"
-                    ? 2
-                    : source.id === "omofun"
-                      ? 3
-                      : source.id === "gugu"
-                        ? 4
-                        : 6,
-            lines: detail.lines,
-          };
-        } catch (error) {
-          console.warn(error);
-        }
-      }
-      return null;
-    })
-  );
-
-  return playlists
-    .filter(Boolean)
-    .sort((a, b) => a.speedRank - b.speedRank || b.matchScore - a.matchScore);
+export function sourceSpeedRank(source) {
+  if (source.kazumi) return 6;
+  return { tokuzilla: 0, xfdm: 1, xgcartoon: 2, omofun: 3, gugu: 4 }[source.id] ?? 6;
 }
 
-export async function fetchMiruRepo() {
-  const response = await fetch("/api/miru/repo", { cache: "no-store" });
-  const payload = await response.json().catch(() => ({}));
-  if (response.status === 404) {
-    throw new Error("本地服务版本过旧，请完全退出 anime 后重新打开");
+export async function loadSourcePlaylist({ source, matches }) {
+  for (const match of (matches || []).slice(0, 6)) {
+    try {
+      const detail = await fetchSourceDetail(source.id, match.id);
+      if (!detail.lines?.length) continue;
+      return {
+        sourceId: source.id,
+        sourceName: source.name,
+        matchName: match.name,
+        matchUrl: match.url,
+        matchScore: match.matchScore,
+        kind: source.kind || "online",
+        speedRank: sourceSpeedRank(source),
+        lines: detail.lines,
+      };
+    } catch (error) {
+      console.warn(error);
+    }
   }
-  if (!response.ok) {
-    throw new Error(payload.error || `Miru repo failed: ${response.status}`);
-  }
-  return payload;
+  return null;
 }
-
-export async function fetchMiruInstalled() {
-  const response = await fetch("/api/miru/installed", { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Miru installed failed: ${response.status}`);
-  }
-  return response.json();
-}
-
-export async function installMiruExtension(packageName) {
-  const response = await fetch(
-    `/api/miru/install?package=${encodeURIComponent(packageName)}`
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || `Install failed: ${response.status}`);
-  }
-  await refreshWatchSources();
-  return payload;
-}
-
-export async function uninstallMiruExtension(packageName) {
-  const response = await fetch(
-    `/api/miru/uninstall?package=${encodeURIComponent(packageName)}`
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || `Uninstall failed: ${response.status}`);
-  }
-  await refreshWatchSources();
-  return payload;
-}
-
 export async function fetchKazumiRepo() {
   const response = await fetch("/api/kazumi/repo", { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));

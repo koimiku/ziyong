@@ -7,11 +7,15 @@ import {
   ruleFileName,
   ruleRawUrl,
   searchRule,
+  seedDefaultRules,
 } from "../../kazumi/engine.js";
 
 const STORAGE_KEY = "anime-kazumi-rules-v1";
+const SEED_KEY = "anime-kazumi-seeded-v1";
+const LEGACY_MIRU_KEY = "anime-miru-extensions-v1";
 const rules = new Map();
 let readyPromise = null;
+let seedPromise = null;
 
 function readStore() {
   try {
@@ -32,6 +36,11 @@ function writeStore() {
 export async function ensureKazumiReady() {
   if (!readyPromise) {
     readyPromise = Promise.resolve().then(() => {
+      try {
+        localStorage.removeItem(LEGACY_MIRU_KEY);
+      } catch {
+        // Storage can be unavailable; the legacy key is only reclaimed space.
+      }
       rules.clear();
       for (const [name, stored] of Object.entries(readStore())) {
         try {
@@ -73,6 +82,34 @@ export async function fetchKazumiIndex() {
   const payload = JSON.parse(await requestText(KAZUMI_RULES_INDEX));
   if (!Array.isArray(payload)) throw new Error("规则索引格式无效");
   return payload.filter((item) => item && item.name);
+}
+
+export function seedDefaultKazumiRules() {
+  if (!seedPromise) {
+    seedPromise = runSeed().finally(() => {
+      seedPromise = null;
+    });
+  }
+  return seedPromise;
+}
+
+async function runSeed() {
+  await ensureKazumiReady();
+  if (localStorage.getItem(SEED_KEY)) return { ran: false, installed: 0, failed: [] };
+  const { BUNDLED_KAZUMI_RULES } = await import("../../kazumi/bundled-rules.js");
+  const index = await fetchKazumiIndex().catch((error) => {
+    console.warn("[kazumi] rules index unavailable, using bundled rules", error?.message || error);
+    return [];
+  });
+  const result = await seedDefaultRules({
+    bundled: BUNDLED_KAZUMI_RULES,
+    index,
+    installedNames: new Set(rules.keys()),
+    install: installKazumiRule,
+    importRule: (rule) => importKazumiRule({ rule }),
+  });
+  localStorage.setItem(SEED_KEY, JSON.stringify({ seededAt: Date.now(), ...result }));
+  return { ran: true, ...result };
 }
 
 export async function installKazumiRule(name) {

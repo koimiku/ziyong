@@ -17,7 +17,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-    <link rel="stylesheet" href="./styles.css" /><link rel="stylesheet" href="./client/ui-polish.css" />
+    <link rel="stylesheet" href="./styles.css" /><link rel="stylesheet" href="./client/ui-polish.css" /><link rel="stylesheet" href="./client/motion.css" />
   </head>
   <body>
     <header class="desktop-titlebar" id="desktopTitlebar" hidden aria-label="窗口标题栏">
@@ -323,7 +323,7 @@
           </div>
           <div class="settings-card notice">
             <h3>资源说明</h3>
-            <p>内置在线片源优先；也可安装 Miru 扩展或 Kazumi 规则作为额外视频源。BT 类扩展暂不支持。</p>
+            <p>内置在线片源优先；首次启动会自动安装常用 Kazumi 规则作为额外视频源。</p>
           </div>
         </section>
 
@@ -332,7 +332,7 @@
             <div class="sources-page-intro">
               <p class="eyebrow">Anime</p>
               <h2>片源</h2>
-              <p class="sources-page-desc">内置在线源、Miru 扩展和 Kazumi 规则，播放番剧时自动匹配可用线路。</p>
+              <p class="sources-page-desc">内置在线源和 Kazumi 规则，播放番剧时自动匹配可用线路。</p>
             </div>
             <div class="sources-page-actions">
               <button class="small-button" id="installAllSourcesButton" type="button">一键安装全部</button>
@@ -350,7 +350,7 @@
             <button class="small-button" type="submit">导入规则</button>
           </form>
           <p class="kazumi-import-status" id="kazumiImportStatus"></p>
-          <p class="miru-status" id="miruStatus" role="status" aria-live="polite">正在连接官方仓库...</p>
+          <p class="miru-status" id="miruStatus" role="status" aria-live="polite">正在加载片源…</p>
           <div class="miru-extension-list" id="miruExtensionList"></div>
         </section>
       </div>

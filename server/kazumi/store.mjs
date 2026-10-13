@@ -9,6 +9,7 @@ import {
   ruleFileName,
   ruleRawUrl,
   searchRule,
+  seedDefaultRules,
   setHtmlParser,
 } from "../../client/kazumi/engine.js";
 import { parseHtmlWithCheerio } from "./html.mjs";
@@ -18,17 +19,52 @@ setHtmlParser(parseHtmlWithCheerio);
 let appRoot = process.cwd();
 const rules = new Map();
 let readyPromise = null;
+let seedPromise = null;
 
 export function setKazumiRoot(root) {
   if (root && root !== appRoot) {
     appRoot = root;
     readyPromise = null;
+    seedPromise = null;
     rules.clear();
   }
 }
 
 function rulesDir() {
   return join(appRoot, "data", "kazumi", "rules");
+}
+
+function seedFlagPath() {
+  return join(appRoot, "data", "kazumi", "seeded.json");
+}
+
+export function seedDefaultKazumiRules() {
+  if (!seedPromise) {
+    seedPromise = runSeed().finally(() => {
+      seedPromise = null;
+    });
+  }
+  return seedPromise;
+}
+
+async function runSeed() {
+  await ensureKazumiReady();
+  if (existsSync(seedFlagPath())) return { ran: false, installed: 0, failed: [] };
+  const { BUNDLED_KAZUMI_RULES } = await import("../../client/kazumi/bundled-rules.js");
+  const index = await fetchKazumiIndex().catch((error) => {
+    console.warn("[kazumi] rules index unavailable, using bundled rules", error?.message || error);
+    return [];
+  });
+  const result = await seedDefaultRules({
+    bundled: BUNDLED_KAZUMI_RULES,
+    index,
+    installedNames: new Set(rules.keys()),
+    install: installKazumiRule,
+    importRule: (rule) => importKazumiRule({ rule }),
+  });
+  mkdirSync(join(appRoot, "data", "kazumi"), { recursive: true });
+  writeFileSync(seedFlagPath(), `${JSON.stringify({ seededAt: Date.now(), ...result })}\n`, "utf8");
+  return { ran: true, ...result };
 }
 
 export async function ensureKazumiReady(root = appRoot) {

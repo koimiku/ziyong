@@ -12,7 +12,8 @@ import { initializeDesktopNav } from "./client/desktop-nav.js";
 import { initializeMediaRows } from "./client/media-rows.js";
 import { initializeMobile } from "./client/mobile.js";
 import { initializeMobileInstall } from "./client/mobile-install.js";
-import { initializeMiruPanel } from "./client/miru-ui.js";
+import { initializeSourcesPanel } from "./client/sources-ui.js";
+import { ensureDefaultSources } from "./client/sources.js";
 import { loadExploreFeed, loadTokusatsuFeed, renderResults } from "./client/results.js";
 import { loadCalendarFeed } from "./client/calendar.js";
 import { initializeSearchDialog } from "./client/search-dialog.js";
@@ -121,7 +122,8 @@ try {
 
   // Let the first frame paint before background source discovery.
   setTimeout(() => {
-    initializeMiruPanel().catch(error => console.warn(error));
+    initializeSourcesPanel().catch(error => console.warn(error));
+    ensureDefaultSources().catch(error => console.warn("[sources]", error));
   }, 1200);
 
   // Native-only features: load after UI so failures cannot blank the app.
@@ -129,9 +131,6 @@ try {
     import("./client/native/back-button.js")
       .then(({ initializeAndroidBackButton }) => initializeAndroidBackButton())
       .catch((error) => console.warn("[back]", error));
-    import("./client/native/miru/repo.js")
-      .then(({ ensureMiruReady }) => ensureMiruReady())
-      .catch((error) => console.warn("[miru]", error));
   }
 
   import("./client/app-update.js")

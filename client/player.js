@@ -3,6 +3,10 @@ import { recordWatchProgress } from "./watch-history.js";
 import { escapeHtml } from "./utils.js";
 
 const streamCache = new Map();
+const MAX_LINES_PER_SOURCE = 2;
+const MAX_PLAY_ATTEMPTS = 6;
+const PLAY_RESOLVE_TIMEOUT_MS = 45000;
+const MIN_EPISODE_SECONDS = 30;
 
 export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) {
   const video = document.querySelector("#sourcePlayer");
@@ -86,12 +90,23 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   function refreshEpisodeMap(nextMap) {
     if (!Array.isArray(nextMap) || !nextMap.length) return;
     const current = currentEpisodeEntry();
+    const currentSource = currentSourceRef();
     episodes = nextMap;
     const nextIndex = episodes.findIndex((entry) => entry.key === current?.key);
     state.episodeIndex = nextIndex >= 0 ? nextIndex : 0;
-    state.sourceIndex = Math.min(
-      state.sourceIndex,
-      Math.max(0, (episodes[state.episodeIndex]?.sources?.length || 1) - 1)
+    const sources = episodes[state.episodeIndex]?.sources || [];
+    const sameSource = currentSource
+      ? sources.findIndex(
+          (source) =>
+            source.playlistIndex === currentSource.playlistIndex &&
+            source.lineIndex === currentSource.lineIndex &&
+            source.episodeIndex === currentSource.episodeIndex
+        )
+      : -1;
+    state.sourceIndex = sameSource >= 0 ? sameSource : 0;
+    episodeTabs.innerHTML = renderEpisodeTabs(
+      episodes.map((entry) => ({ label: entry.label, nid: entry.nid })),
+      state.episodeIndex
     );
     updateChrome();
   }
@@ -351,12 +366,18 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
 
     const candidates = buildPlayCandidates(true).concat(buildPlayCandidates(false));
     const seen = new Set();
-    const ordered = candidates.filter((candidate) => {
-      const key = `${candidate.playlistIndex}:${candidate.lineIndex}:${candidate.episodeIndex}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    const perSource = new Map();
+    const ordered = candidates
+      .filter((candidate) => {
+        const key = `${candidate.playlistIndex}:${candidate.lineIndex}:${candidate.episodeIndex}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        const tried = perSource.get(candidate.sourceId) || 0;
+        if (tried >= MAX_LINES_PER_SOURCE) return false;
+        perSource.set(candidate.sourceId, tried + 1);
+        return true;
+      })
+      .slice(0, MAX_PLAY_ATTEMPTS);
 
     let lastError = null;
 
@@ -539,7 +560,11 @@ async function getStream(playApi) {
 }
 
 async function fetchSourcePlay(playApi) {
-  const response = await fetch(playApi);
+  const response = await fetch(playApi, { signal: AbortSignal.timeout(PLAY_RESOLVE_TIMEOUT_MS) }).catch(
+    (error) => {
+      throw new Error(error?.name === "TimeoutError" ? "解析播放地址超时" : error?.message || "解析失败");
+    }
+  );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.error || `播放解析失败: ${response.status}`);
@@ -569,9 +594,10 @@ function attachStream(video, stream, state) {
     video.pause();
     video.removeAttribute("src");
     video.load();
+    video.preload = "auto";
 
     if (stream.type === "hls") {
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      if (!window.Hls?.isSupported() && video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = stream.url;
         video.addEventListener("loadedmetadata", () => finish(), { once: true });
         video.addEventListener("error", () => finish(new Error("视频加载失败，请换片源")), {
@@ -603,7 +629,16 @@ function attachStream(video, stream, state) {
     }
 
     video.src = stream.url;
-    video.addEventListener("loadedmetadata", () => finish(), { once: true });
+    video.addEventListener(
+      "loadedmetadata",
+      () =>
+        finish(
+          video.duration < MIN_EPISODE_SECONDS
+            ? new Error("片源返回的是占位短片，请换片源")
+            : null
+        ),
+      { once: true }
+    );
     video.addEventListener("error", () => finish(new Error("视频加载失败，请换片源")), {
       once: true,
     });

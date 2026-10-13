@@ -13,20 +13,13 @@ import {
 } from "./handlers.mjs";
 import { handleBangumiCalendar, warmupBangumiCalendar } from "./bangumi.mjs";
 import { handleBangumiGateway } from "./bangumi-gateway.mjs";
-import {
-  handleMiruInstall,
-  handleMiruInstalled,
-  handleMiruRepo,
-  handleMiruSources,
-  handleMiruUninstall,
-} from "./miru/handlers.mjs";
 import { handleServerInfo, handleServerQr, setServerInfo } from "./info.mjs";
-import { ensureMiruReady, setMiruRoot } from "./miru/repo.mjs";
 import {
   handleKazumiImport,
   handleKazumiInstall,
   handleKazumiInstalled,
   handleKazumiRepo,
+  handleKazumiSeed,
   handleKazumiSources,
   handleKazumiUninstall,
 } from "./kazumi/handlers.mjs";
@@ -42,7 +35,6 @@ let root = resolve(process.env.ANIME_ROOT || process.env.FANXUN_ROOT || process.
 
 export function setAppRoot(nextRoot) {
   root = resolve(nextRoot);
-  setMiruRoot(root);
   setKazumiRoot(root);
   setWatchHistoryRoot(root);
 }
@@ -103,31 +95,6 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
         return;
       }
 
-      if (url.pathname === "/api/miru/repo") {
-        await handleMiruRepo(url, response);
-        return;
-      }
-
-      if (url.pathname === "/api/miru/installed") {
-        await handleMiruInstalled(url, response);
-        return;
-      }
-
-      if (url.pathname === "/api/miru/sources") {
-        await handleMiruSources(url, response);
-        return;
-      }
-
-      if (url.pathname === "/api/miru/install") {
-        await handleMiruInstall(url, response);
-        return;
-      }
-
-      if (url.pathname === "/api/miru/uninstall") {
-        await handleMiruUninstall(url, response);
-        return;
-      }
-
       if (url.pathname === "/api/kazumi/repo") {
         await handleKazumiRepo(url, response);
         return;
@@ -140,6 +107,11 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
 
       if (url.pathname === "/api/kazumi/sources") {
         await handleKazumiSources(url, response);
+        return;
+      }
+
+      if (url.pathname === "/api/kazumi/seed") {
+        await handleKazumiSeed(url, response);
         return;
       }
 
@@ -251,15 +223,11 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
       server.listen(candidatePort, host);
     };
 
-    setMiruRoot(root);
     setKazumiRoot(root);
     setWatchHistoryRoot(root);
-    // The UI and built-in sources must not wait for extension downloads.
+    // The UI and built-in sources must not wait for rule downloads.
     tryListen(port, 20);
     setImmediate(() => {
-      ensureMiruReady(root).catch(error => {
-        console.warn("[miru] init failed, starting without extensions", error);
-      });
       ensureKazumiReady(root).catch(error => {
         console.warn("[kazumi] init failed, starting without rules", error);
       });

@@ -1,6 +1,28 @@
 import { Readable } from "node:stream";
 import { browserHeaders, refererByHost } from "./config.mjs";
-import { isAllowedProxyHost, rewriteM3u8 } from "./utils.mjs";
+import { NO_REFERER, getMediaHeaders, isAllowedProxyHost, rewriteM3u8 } from "./utils.mjs";
+
+const SITE_BOUND_HEADERS = ["Referer", "Origin", "Cookie"];
+
+// Storage hosts behind a redirect often reject the original site's Referer,
+// and browsers would not forward it verbatim either.
+export async function fetchFollowingRedirects(target, headers, { hops = 5, signal } = {}) {
+  let current = target;
+  let currentHeaders = { ...headers };
+  for (let hop = 0; hop <= hops; hop += 1) {
+    const upstream = await fetch(current, { headers: currentHeaders, redirect: "manual", signal });
+    const location = upstream.headers.get("location");
+    if (upstream.status < 300 || upstream.status >= 400 || !location) return upstream;
+    await upstream.body?.cancel().catch(() => {});
+    const next = new URL(location, current);
+    if (next.host !== new URL(current).host) {
+      currentHeaders = { ...currentHeaders };
+      SITE_BOUND_HEADERS.forEach((name) => delete currentHeaders[name]);
+    }
+    current = next.href;
+  }
+  throw new Error("Too many redirects");
+}
 
 export async function handleMediaProxy(url, request, response) {
   const target = String(url.searchParams.get("url") || "");
@@ -20,8 +42,9 @@ export async function handleMediaProxy(url, request, response) {
   }
 
   try {
+    const refererParam = String(url.searchParams.get("referer") || "");
     const referer =
-      String(url.searchParams.get("referer") || "") ||
+      refererParam ||
       refererByHost.get(parsed.hostname) ||
       [...refererByHost.entries()].find(([host]) => parsed.hostname.endsWith(`.${host}`))?.[1] ||
       `${parsed.origin}/`;
@@ -29,16 +52,15 @@ export async function handleMediaProxy(url, request, response) {
 
     const upstreamHeaders = {
       ...browserHeaders,
+      ...getMediaHeaders(parsed.hostname),
       "User-Agent": userAgent,
-      Referer: referer,
     };
+    if (referer !== NO_REFERER) upstreamHeaders.Referer = referer;
     if (request.headers.range) {
       upstreamHeaders.Range = request.headers.range;
     }
 
-    const upstream = await fetch(target, {
-      headers: upstreamHeaders,
-    });
+    const upstream = await fetchFollowingRedirects(target, upstreamHeaders);
 
     const contentType = upstream.headers.get("content-type") || "";
     const isPlaylist =
@@ -46,7 +68,15 @@ export async function handleMediaProxy(url, request, response) {
 
     if (isPlaylist) {
       const body = await upstream.text();
-      const rewritten = rewriteM3u8(body, target);
+      if (!upstream.ok || !body.trimStart().startsWith("#EXTM3U")) {
+        response.writeHead(upstream.ok ? 502 : upstream.status, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end("Upstream did not return a playlist");
+        return;
+      }
+      const rewritten = rewriteM3u8(body, target, {
+        referer: url.searchParams.get("referer") || "",
+        ua: url.searchParams.get("ua") || "",
+      });
       response.writeHead(200, {
         "Content-Type": "application/vnd.apple.mpegurl",
         "Access-Control-Allow-Origin": "*",

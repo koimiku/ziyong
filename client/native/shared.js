@@ -92,6 +92,19 @@ export function decodePlayerUrl(url, encrypt) {
   return value;
 }
 
+export function buildStreamPayload(streamUrl, pageUrl, extraHeaders = {}) {
+  const type =
+    /\.m3u8(\?|$)/i.test(streamUrl) || /mpegurl/i.test(streamUrl) ? "hls" : "file";
+  return {
+    url: streamUrl,
+    sourceUrl: streamUrl,
+    type,
+    proxied: false,
+    pageUrl,
+    headers: extraHeaders,
+  };
+}
+
 export async function nativeFetch(url, options = {}) {
   const headers = { ...browserHeaders, ...(options.headers || {}) };
   const response = await fetch(url, {

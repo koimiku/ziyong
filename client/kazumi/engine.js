@@ -40,6 +40,52 @@ export function ruleRawUrl(name, repo = KAZUMI_RULES_REPO) {
   return `${String(repo).replace(/\/$/, "")}/${encodeURIComponent(ruleFileName(name))}.json`;
 }
 
+export function isDefaultRuleCandidate(item) {
+  return Boolean(item?.name) && (!item.type || item.type === "anime");
+}
+
+export async function seedDefaultRules({
+  bundled = [],
+  index = [],
+  installedNames,
+  install,
+  importRule,
+  limit = 4,
+}) {
+  const failed = [];
+  let installed = 0;
+  for (const raw of bundled) {
+    if (!isDefaultRuleCandidate(raw) || installedNames.has(raw.name)) continue;
+    try {
+      await importRule(raw);
+      installedNames.add(raw.name);
+      installed += 1;
+    } catch (error) {
+      console.warn(`[kazumi] bundled rule failed: ${raw?.name}`, error?.message || error);
+    }
+  }
+  const names = index
+    .filter(isDefaultRuleCandidate)
+    .map((item) => item.name)
+    .filter((name) => !installedNames.has(name));
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, names.length) }, async () => {
+    while (cursor < names.length) {
+      const name = names[cursor];
+      cursor += 1;
+      try {
+        await install(name);
+        installed += 1;
+      } catch (error) {
+        failed.push(name);
+        console.warn(`[kazumi] default rule failed: ${name}`, error?.message || error);
+      }
+    }
+  });
+  await Promise.all(workers);
+  return { installed, failed };
+}
+
 export function normalizeRule(input) {
   const json = typeof input === "string" ? JSON.parse(input) : input;
   if (!json || typeof json !== "object" || Array.isArray(json)) {
@@ -138,6 +184,14 @@ export async function detailRule(rule, sourceKey, request) {
     kind: "online",
     lines,
   };
+}
+
+export function rulePlayPageUrl(rule, watchUrl) {
+  return normalizeUrl(rule.baseUrl, watchUrl);
+}
+
+export function rulePlayReferer(rule, pageUrl) {
+  return playbackHeaders(rule, pageUrl).Referer;
 }
 
 export async function resolveRulePlay(rule, watchUrl, request) {

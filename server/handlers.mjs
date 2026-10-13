@@ -1,8 +1,7 @@
 import { createHealthMonitor } from "../client/health-monitor.js";
 import { browserHeaders, watchSources } from "./config.mjs";
-import { getRuntime, listInstalledMeta } from "./miru/repo.mjs";
 import { getCache, setCache } from "./cache.mjs";
-import { buildStreamPayload, writeJson } from "./utils.mjs";
+import { NO_REFERER, buildStreamPayload, writeJson } from "./utils.mjs";
 import {
   parseMaccmsLines,
   preferDirectMaccmsLines,
@@ -14,10 +13,9 @@ import {
   resolveXgcartoonStream,
   searchXgcartoon,
 } from "./xgcartoon.mjs";
-import { parseMiruSourceId } from "./miru/config.mjs";
-import { detailMiru, resolveMiruPlay, searchMiru } from "./miru/adapter.mjs";
-import { getMeta } from "./miru/repo.mjs";
-import { parseKazumiSourceId } from "../client/kazumi/engine.js";
+import { parseKazumiSourceId, rulePlayPageUrl, rulePlayReferer } from "../client/kazumi/engine.js";
+import { hasMediaSniffer, sniffMedia } from "./media-sniffer.mjs";
+import { fetchFollowingRedirects } from "./proxy.mjs";
 import {
   detailKazumi,
   ensureKazumiReady,
@@ -45,9 +43,8 @@ function loadMikanModule() {
 export async function handleSourceSearch(url, response) {
   const sourceId = String(url.searchParams.get("source") || "");
   const query = String(url.searchParams.get("q") || "").trim();
-  const miruPackage = parseMiruSourceId(sourceId);
   const kazumiName = parseKazumiSourceId(sourceId);
-  const source = miruPackage ? getMeta(miruPackage) : kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
+  const source = kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
 
   if ((!source && !kazumiName) || !query) {
     writeJson(response, 400, { error: "Missing source or query" });
@@ -58,8 +55,6 @@ export async function handleSourceSearch(url, response) {
     if (kazumiName) await ensureKazumiReady();
     const list = kazumiName
       ? await searchKazumi(kazumiName, query)
-      : miruPackage
-      ? await searchMiru(miruPackage, query)
       : source.type === "tokuzilla"
         ? await searchTokuzilla(query)
         : source.type === "mikan"
@@ -81,9 +76,8 @@ export async function handleSourceSearch(url, response) {
 export async function handleSourceDetail(url, response) {
   const sourceId = String(url.searchParams.get("source") || "");
   const id = String(url.searchParams.get("id") || "").trim();
-  const miruPackage = parseMiruSourceId(sourceId);
   const kazumiName = parseKazumiSourceId(sourceId);
-  const source = miruPackage ? getMeta(miruPackage) : kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
+  const source = kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
 
   if ((!source && !kazumiName) || !id) {
     writeJson(response, 400, { error: "Missing source or id" });
@@ -102,8 +96,6 @@ export async function handleSourceDetail(url, response) {
     if (kazumiName) {
       await ensureKazumiReady();
       payload = await detailKazumi(kazumiName, id);
-    } else if (miruPackage) {
-      payload = await detailMiru(miruPackage, id);
     } else if (source.type === "tokuzilla") {
       payload = await detailTokuzilla(id);
     } else if (source.type === "mikan") {
@@ -151,9 +143,8 @@ export async function handleSourceDetail(url, response) {
 export async function handleSourcePlay(url, response) {
   const sourceId = String(url.searchParams.get("source") || "");
   const id = String(url.searchParams.get("id") || "").trim();
-  const miruPackage = parseMiruSourceId(sourceId);
   const kazumiName = parseKazumiSourceId(sourceId);
-  const source = miruPackage ? getMeta(miruPackage) : kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
+  const source = kazumiName ? getKazumiRule(kazumiName) : watchSources[sourceId];
   const chapter = String(url.searchParams.get("chapter") || "");
   const torrent = String(url.searchParams.get("torrent") || "");
   const page = String(url.searchParams.get("page") || "");
@@ -166,24 +157,24 @@ export async function handleSourcePlay(url, response) {
     writeJson(response, 400, { error: "Missing source" });
     return;
   }
-  if ((miruPackage || kazumiName) && !watch) {
+  if (kazumiName && !watch) {
     writeJson(response, 400, { error: "Missing watch url" });
     return;
   }
-  if (!miruPackage && !kazumiName && source.type === "mikan" && !torrent) {
+  if (!kazumiName && source.type === "mikan" && !torrent) {
     writeJson(response, 400, { error: "Missing torrent" });
     return;
   }
-  if (!miruPackage && !kazumiName && source.type !== "mikan" && source.type !== "tokuzilla" && !id) {
+  if (!kazumiName && source.type !== "mikan" && source.type !== "tokuzilla" && !id) {
     writeJson(response, 400, { error: "Missing source or id" });
     return;
   }
-  if (!miruPackage && !kazumiName && source.type === "tokuzilla" && !id) {
+  if (!kazumiName && source.type === "tokuzilla" && !id) {
     writeJson(response, 400, { error: "Missing tokuzilla slug" });
     return;
   }
 
-  const cacheKey = miruPackage || kazumiName
+  const cacheKey = kazumiName
     ? `play:${sourceId}:${watch}`
     : source.type === "tokuzilla"
       ? `play:${sourceId}:${id}:${ep || 1}`
@@ -200,26 +191,88 @@ export async function handleSourcePlay(url, response) {
   }
 
   try {
-    const stream = kazumiName
-      ? await (async () => {
-          await ensureKazumiReady();
+    let stream;
+    if (kazumiName) {
+      await ensureKazumiReady();
+      const pageUrl = rulePlayPageUrl(source, watch);
+      stream = await resolveWithSniffFallback(
+        async () => {
           const found = await resolveKazumiPlay(kazumiName, watch);
           return buildStreamPayload(found.mediaUrl, found.pageUrl, found.headers);
-        })()
-      : miruPackage
-      ? await resolveMiruPlay(miruPackage, watch, page)
-      : source.type === "tokuzilla"
-        ? await resolveTokuzillaStream(id, ep || 1)
-        : source.type === "mikan"
-          ? await (await loadMikanModule()).resolveMikanPlay(torrent, page)
-          : source.type === "xgcartoon"
-            ? await resolveXgcartoonStream(source, id, chapter)
-            : await resolveMaccmsStream(source, id, sid, nid);
+        },
+        pageUrl,
+        rulePlayReferer(source, pageUrl)
+      );
+    } else if (source.type === "tokuzilla") {
+      stream = await resolveTokuzillaStream(id, ep || 1);
+    } else if (source.type === "mikan") {
+      stream = await (await loadMikanModule()).resolveMikanPlay(torrent, page);
+    } else if (source.type === "xgcartoon") {
+      stream = await resolveWithSniffFallback(
+        () => resolveXgcartoonStream(source, id, chapter),
+        chapter ? source.playPageUrl(id, chapter) : "",
+        `${source.origin}/`
+      );
+    } else {
+      stream = await resolveWithSniffFallback(
+        () => resolveMaccmsStream(source, id, sid, nid),
+        source.playPageUrl(id, sid, nid),
+        `${source.origin}/`
+      );
+    }
 
     setCache(cacheKey, stream);
     writeJson(response, 200, stream);
   } catch (error) {
     writeJson(response, 502, { error: String(error?.message || error) });
+  }
+}
+
+async function resolveWithSniffFallback(resolveStatic, pageUrl, referer) {
+  let staticError = null;
+  try {
+    const stream = await resolveStatic();
+    if (!hasMediaSniffer() || !pageUrl || !stream?.sourceUrl) return stream;
+    if (await probeStream(stream)) return stream;
+  } catch (error) {
+    staticError = error;
+    if (!hasMediaSniffer() || !pageUrl) throw error;
+  }
+  try {
+    const found = await sniffMedia(pageUrl, { referer });
+    return buildStreamPayload(found.mediaUrl, found.pageUrl || pageUrl, found.headers);
+  } catch (sniffError) {
+    throw staticError || sniffError;
+  }
+}
+
+// A quick look at the first bytes tells a working link from a signed/expired one
+// before the player spends its timeout on it.
+async function probeStream(stream) {
+  let headers = { ...browserHeaders };
+  try {
+    const params = new URL(stream.url, "http://local").searchParams;
+    if (params.get("referer") && params.get("referer") !== NO_REFERER) headers.Referer = params.get("referer");
+    if (params.get("ua")) headers["User-Agent"] = params.get("ua");
+  } catch {
+    // keep defaults
+  }
+  const isHls = stream.type === "hls";
+  if (!isHls) headers.Range = "bytes=0-1023";
+  try {
+    const upstream = await fetchFollowingRedirects(stream.sourceUrl, headers, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!upstream.ok) return false;
+    const contentType = upstream.headers.get("content-type") || "";
+    if (isHls) {
+      const text = await upstream.text();
+      return text.trimStart().startsWith("#EXTM3U");
+    }
+    await upstream.body?.cancel().catch(() => {});
+    return !/text\/html|application\/json/i.test(contentType);
+  } catch {
+    return false;
   }
 }
 
@@ -235,7 +288,7 @@ export async function handleSourceHealth(url, response) {
   const sourceId = String(url.searchParams.get("source") || "").trim();
   const kazumiName = parseKazumiSourceId(sourceId);
   if (kazumiName) await ensureKazumiReady();
-  if (!watchSources[sourceId] && !getMeta(parseMiruSourceId(sourceId)) && !getKazumiRule(kazumiName)) {
+  if (!watchSources[sourceId] && !getKazumiRule(kazumiName)) {
     writeJson(response, 400, { error: "未知片源" });
     return;
   }
@@ -256,13 +309,9 @@ export async function handleSourcesHealth(_url, response) {
     .filter(([, source]) => source.kind === "online")
     .map(([id]) => id);
 
-  const installedMiru = listInstalledMeta()
-    .filter((meta) => meta.type === "bangumi")
-    .map((meta) => `miru:${meta.package}`);
-
   await ensureKazumiReady().catch(() => {});
   const installedKazumi = listKazumiSources().map((item) => item.id);
-  const sourceIds = [...builtin, ...installedMiru, ...installedKazumi];
+  const sourceIds = [...builtin, ...installedKazumi];
   const results = await healthMonitor.checkAll(sourceIds, { force: _url.searchParams.get("force") === "1" });
 
   writeJson(response, 200, { list: results });
@@ -274,15 +323,6 @@ async function probeSourceHealth(sourceId) {
     await ensureKazumiReady();
     if (!getKazumiRule(kazumiName)) throw new Error("规则未安装");
     const list = await searchKazumi(kazumiName, HEALTH_QUERY);
-    return Array.isArray(list) && list.length > 0;
-  }
-
-  const miruPackage = parseMiruSourceId(sourceId);
-  if (miruPackage) {
-    if (!getRuntime(miruPackage)) {
-      throw new Error("扩展未加载");
-    }
-    const list = await searchMiru(miruPackage, HEALTH_QUERY);
     return Array.isArray(list) && list.length > 0;
   }
 

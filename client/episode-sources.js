@@ -55,7 +55,6 @@ export function buildEpisodeSourceMap(playlists) {
 
 function sourceRank(source) {
   if (source.kind === "torrent") return 20;
-  if (String(source.sourceId || "").startsWith("miru:")) return 10;
   if (source.sourceId === "xfdm") return 0;
   if (source.sourceId === "xgcartoon") return 1;
   if (source.sourceId === "omofun") return 2;
@@ -107,7 +106,7 @@ export function renderEpisodeSourceChips(episodeEntry, activeSourceIndex) {
 }
 
 export function sourceOptionLabel(source) {
-  const siteName = String(source?.sourceName || "").replace(/ · Miru$/, "");
+  const siteName = String(source?.sourceName || "");
   const lineName = String(source?.lineName || "").trim();
   return lineName && lineName !== siteName ? `${siteName} · ${lineName}` : siteName;
 }

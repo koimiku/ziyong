@@ -13,10 +13,12 @@ import {
 import { bindSourcePlayer, renderEpisodeTabs } from "./player.js";
 import { initializeMobile, syncMobileWatchState } from "./mobile.js";
 import {
-  fetchWatchSourceMatches,
   getSourceNamesText,
-  loadSourcePlaylists,
+  loadSourcePlaylist,
+  prepareWatchSearch,
+  searchSourceForItem,
 } from "./sources.js";
+import { createRetrievalPanel } from "./source-retrieval.js";
 import {
   cleanSynopsis,
   escapeAttribute,
@@ -24,8 +26,60 @@ import {
   pickDisplayTitle,
 } from "./utils.js";
 import { getWatchProgress, recordWatch } from "./watch-history.js";
+import { createSourceProgress } from "./source-progress.js";
 
 let activePlayerController = null;
+let lastCardOrigin = null;
+
+document.addEventListener(
+  "click",
+  (event) => {
+    const card = event.target.closest?.(".anime-card, .hero-card, .calendar-card");
+    if (!card) return;
+    const poster = card.querySelector("img") || card;
+    lastCardOrigin = { rect: poster.getBoundingClientRect(), time: performance.now() };
+  },
+  true
+);
+
+function playCardExpansion() {
+  const origin = lastCardOrigin;
+  lastCardOrigin = null;
+  if (!origin || performance.now() - origin.time > 1500) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const page = detailPanel.querySelector(".entry-page");
+  const cover = detailPanel.querySelector(".entry-cover");
+  if (!page || !cover || typeof cover.animate !== "function") return;
+  const target = cover.getBoundingClientRect();
+  const from = origin.rect;
+  if (!target.width || !target.height || !from.width || !from.height) return;
+
+  const ghost = cover.cloneNode();
+  ghost.removeAttribute("id");
+  ghost.className = "entry-cover-ghost";
+  Object.assign(ghost.style, {
+    left: `${target.left}px`,
+    top: `${target.top}px`,
+    width: `${target.width}px`,
+    height: `${target.height}px`,
+  });
+  document.body.append(ghost);
+  page.classList.add("is-expanding");
+  const dx = from.left - target.left;
+  const dy = from.top - target.top;
+  const sx = from.width / target.width;
+  const sy = from.height / target.height;
+  const animation = ghost.animate(
+    [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: "none" }],
+    { duration: 460, easing: "cubic-bezier(.2, 0, 0, 1)" }
+  );
+  const done = () => {
+    ghost.remove();
+    page.classList.remove("is-expanding");
+  };
+  animation.addEventListener("finish", done);
+  animation.addEventListener("cancel", done);
+}
 
 export function stopActivePlayback() {
   if (activePlayerController?.stop) {
@@ -78,6 +132,7 @@ export async function showDetails(item, options = {}) {
   syncMobileWatchState();
 
   detailPanel.innerHTML = renderEntryShell(item, title, players, resume);
+  playCardExpansion();
 
   document.querySelector("#watchBackButton")?.addEventListener("click", () => {
     exitWatchMode();
@@ -85,44 +140,160 @@ export async function showDetails(item, options = {}) {
 
   bindPlayerControls(players);
 
-  const sourceMatches = await fetchWatchSourceMatches(item);
+  const progress = createSourceProgress(document.querySelector("#sourceSection"));
+  const { sources, queries, preset } = await prepareWatchSearch(item);
   if (detailPanel.dataset.requestId !== requestId) return;
 
-  const onlineMatches = sourceMatches.filter((entry) => entry.source.kind === "online");
-  const torrentMatches = sourceMatches.filter((entry) => entry.source.kind === "torrent");
+  runSourceRetrieval({ item, title, resume, requestId, sources, queries, preset, progress });
+}
 
-  const playlists = await loadSourcePlaylists(onlineMatches);
-  if (detailPanel.dataset.requestId !== requestId) return;
+// Each source searches and loads on its own; the player mounts as soon as a
+// preferred source is playable and later sources merge into the episode map.
+function runSourceRetrieval({ item, title, resume, requestId, sources, queries, preset, progress }) {
+  const isCurrent = () => detailPanel.dataset.requestId === requestId;
+  const results = new Map();
+  const playlistState = { items: [] };
+  const deferredTorrents = [];
+  let playerApi = null;
+  let mounted = false;
+  let fallbackShown = false;
+  let outstanding = 0;
+  let graceTimer = null;
 
-  const sourceSection = document.querySelector("#sourceSection");
+  const keywords = [...new Set([...queries, ...(item.aliases || [])].map((v) => String(v).trim()).filter(Boolean))].slice(0, 6);
+  const panel = createRetrievalPanel({
+    keywords,
+    onRetry: (source) => runSource(source, queries),
+    onKeyword: (targets, keyword) => targets.forEach((source) => runSource(source, [keyword], { minScore: 55 })),
+  });
+
   const watchSupport = document.querySelector("#watchSupport");
-  if (!sourceSection || !watchSupport) return;
+  if (watchSupport) {
+    watchSupport.insertAdjacentHTML(
+      "beforeend",
+      `<section class="entry-panel source-retrieval" id="sourceRetrievalPanel" aria-label="片源检索"></section>`
+    );
+  }
+  panel.setSources(sources);
+  progress.onProgress({ type: "start", sources });
 
-  const playlistState = { items: playlists };
-  const episodeSourceMap = buildEpisodeSourceMap(playlistState.items);
-  const rendered = renderWatchPanels(
-    onlineMatches,
-    playlistState.items,
-    episodeSourceMap,
-    item,
-    title,
-    resume
-  );
-  sourceSection.innerHTML = rendered.player;
-  watchSupport.innerHTML = rendered.support;
+  function isPreferred(playlist) {
+    if (resume?.sourceId) return playlist.sourceId === resume.sourceId;
+    return playlist.speedRank < 6;
+  }
 
-  const playerApi = bindSourcePlayer(playlistState, episodeSourceMap, {
-    itemId: item.id,
-    resume,
-  });
-  activePlayerController = playerApi;
+  function mount() {
+    if (mounted || !isCurrent()) return;
+    const sourceSection = document.querySelector("#sourceSection");
+    const support = document.querySelector("#watchSupport");
+    if (!sourceSection || !support) return;
+    clearTimeout(graceTimer);
+    mounted = true;
+    playlistState.items.sort((a, b) => a.speedRank - b.speedRank || b.matchScore - a.matchScore);
+    playlistState.items.push(...deferredTorrents.splice(0));
+    const episodeSourceMap = buildEpisodeSourceMap(playlistState.items);
+    const rendered = renderWatchPanels(
+      [...results.values()],
+      playlistState.items,
+      episodeSourceMap,
+      item,
+      title,
+      resume
+    );
+    sourceSection.innerHTML = rendered.player;
+    support.innerHTML = rendered.support;
+    panel.render();
+    playerApi = bindSourcePlayer(playlistState, episodeSourceMap, { itemId: item.id, resume });
+    activePlayerController = playerApi;
+  }
 
-  loadSourcePlaylists(torrentMatches).then((extraPlaylists) => {
-    if (detailPanel.dataset.requestId !== requestId || !extraPlaylists.length) return;
-    if (activePlayerController !== playerApi) return;
-    playlistState.items.push(...extraPlaylists);
-    playerApi?.refreshEpisodeMap?.(buildEpisodeSourceMap(playlistState.items));
-  });
+  function showFallback() {
+    if (mounted || fallbackShown || !isCurrent()) return;
+    const sourceSection = document.querySelector("#sourceSection");
+    const support = document.querySelector("#watchSupport");
+    if (!sourceSection || !support) return;
+    fallbackShown = true;
+    sourceSection.innerHTML = renderSourceFallback();
+    support.innerHTML = renderEmptySupport(item, title, [...results.values()]);
+    panel.render();
+  }
+
+  function addPlaylist(playlist) {
+    if (playlist.kind === "torrent" && !mounted) {
+      deferredTorrents.push(playlist);
+      return;
+    }
+    playlistState.items.push(playlist);
+    if (mounted) {
+      if (activePlayerController === playerApi) {
+        playerApi?.refreshEpisodeMap?.(buildEpisodeSourceMap(playlistState.items));
+      }
+      return;
+    }
+    if (isPreferred(playlist)) {
+      mount();
+    } else if (!graceTimer) {
+      graceTimer = setTimeout(mount, 2500);
+    }
+  }
+
+  function settle() {
+    if (outstanding > 0 || !isCurrent()) return;
+    if (playlistState.items.length) mount();
+    else showFallback();
+  }
+
+  async function runSource(source, sourceQueries, options = {}) {
+    if (!isCurrent()) return;
+    outstanding += 1;
+    panel.update(source.id, { state: "pending", matchName: "" });
+    const initial = !results.has(source.id);
+    try {
+      const matches = preset.get(source.id) || (await searchSourceForItem(source, sourceQueries, options));
+      if (!isCurrent()) return;
+      results.set(source.id, { source, matches, error: null });
+      if (initial) progress.onProgress({ type: "source", source, state: matches.length ? "found" : "empty", count: matches.length });
+      if (!matches.length) {
+        panel.update(source.id, { state: "empty" });
+        return;
+      }
+      panel.update(source.id, { state: "loading", matchName: matches[0].name });
+      const playlist = await loadSourcePlaylist({ source, matches });
+      if (!isCurrent()) return;
+      if (!playlist) {
+        panel.update(source.id, { state: "nolines" });
+        return;
+      }
+      const episodes = Math.max(...playlist.lines.map((line) => line.episodes?.length || 0));
+      panel.update(source.id, { state: "ready", matchName: playlist.matchName, episodes });
+      addPlaylist(playlist);
+    } catch (error) {
+      console.warn(source.id, error);
+      if (!isCurrent()) return;
+      results.set(source.id, { source, matches: [], error });
+      if (initial) progress.onProgress({ type: "source", source, state: "error", count: 0 });
+      panel.update(source.id, { state: "error", error: describeSourceError(error) });
+    } finally {
+      outstanding -= 1;
+      settle();
+    }
+  }
+
+  if (!sources.length) {
+    showFallback();
+    return;
+  }
+  sources.forEach((source) => runSource(source, queries));
+}
+
+function describeSourceError(error) {
+  const message = String(error?.message || "");
+  if (message.includes("超时")) return "检索超时";
+  if (/captcha|验证码|站点验证/i.test(message)) return "需要站点验证";
+  const status = message.match(/\b([45]\d\d)\b/);
+  if (status) return `站点返回 ${status[1]}`;
+  if (/fetch|network|Failed/i.test(message)) return "连接失败";
+  return "检索失败";
 }
 
 function renderEntryShell(item, title, players, resume) {
@@ -263,6 +434,8 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
         </div>
       </section>
 
+      <section class="entry-panel source-retrieval" id="sourceRetrievalPanel" aria-label="片源检索"></section>
+
       <section class="watch-summary entry-panel">
         <div class="support-section-title"><strong>简介</strong></div>
         <p class="summary">${escapeHtml(cleanSynopsis(item.synopsis))}</p>
@@ -276,6 +449,7 @@ function renderWatchPanels(sourceResults, playlists, episodeSourceMap, item, tit
 
 function renderEmptySupport(item, title, sourceResults) {
   return `
+    <section class="entry-panel source-retrieval" id="sourceRetrievalPanel" aria-label="片源检索"></section>
     <section class="watch-summary entry-panel">
       <div class="watch-subject">
         <img class="watch-cover" src="${escapeAttribute(getPosterUrl(item))}" alt="${escapeAttribute(title)} 海报" />
@@ -308,7 +482,7 @@ function renderSourceFallback() {
   return `
     <div class="source-header">
       <strong>在线观看</strong>
-      <span>没有解析到可播放的直链，请换一部或稍后再试。</span>
+      <span>暂时没有片源找到这部番，可以在「片源检索」里换个名字或重试失败的片源。</span>
     </div>
   `;
 }

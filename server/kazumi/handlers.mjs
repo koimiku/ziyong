@@ -10,6 +10,7 @@ import {
   listKazumiSources,
   resolveKazumiPlay,
   searchKazumi,
+  seedDefaultKazumiRules,
   uninstallKazumiRule,
 } from "./store.mjs";
 
@@ -48,6 +49,15 @@ export async function handleKazumiInstalled(_url, response) {
 export async function handleKazumiSources(_url, response) {
   await ensureKazumiReady().catch(() => {});
   writeJson(response, 200, { list: listKazumiSources() });
+}
+
+export async function handleKazumiSeed(_url, response) {
+  try {
+    const result = await seedDefaultKazumiRules();
+    writeJson(response, 200, { ok: true, ...result, sources: listKazumiSources() });
+  } catch (error) {
+    writeJson(response, 502, { error: String(error?.message || error) });
+  }
 }
 
 export async function handleKazumiInstall(url, response) {

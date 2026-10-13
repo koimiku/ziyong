@@ -2419,6 +2419,7 @@ body.app-update-open {
 .watch-page,
 .entry-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   height: 100vh;
 }
@@ -2470,6 +2471,7 @@ body.app-update-open {
 .entry-hero-info h1 {
   font-size: clamp(22px, 3vw, 34px);
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .entry-aliases {
@@ -2500,6 +2502,8 @@ body.app-update-open {
 .entry-player-column,
 .watch-player-column {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   align-content: start;
   gap: 12px;
   padding: 18px;
@@ -2510,6 +2514,8 @@ body.app-update-open {
 .entry-sidebar,
 .watch-support {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   align-content: start;
   gap: 18px;
   padding: 18px;
@@ -3765,7 +3771,7 @@ body.app-update-open {
 
   .entry-body,
   .watch-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto;
     min-height: auto;
   }

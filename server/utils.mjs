@@ -54,8 +54,32 @@ export function decodePlayerUrl(url, encrypt) {
   return value;
 }
 
-export function proxyMediaUrl(target) {
-  return `/api/media-proxy?url=${encodeURIComponent(target)}`;
+const mediaHeadersByHost = new Map();
+export const NO_REFERER = "none";
+
+export function registerMediaHeaders(target, headers = {}) {
+  try {
+    const host = new URL(target).hostname;
+    const extra = {};
+    for (const name of ["Cookie", "Origin"]) {
+      const value = headers[name] || headers[name.toLowerCase()];
+      if (value) extra[name] = value;
+    }
+    if (Object.keys(extra).length) mediaHeadersByHost.set(host, extra);
+  } catch {
+    // ignore
+  }
+}
+
+export function getMediaHeaders(hostname) {
+  return mediaHeadersByHost.get(hostname) || {};
+}
+
+export function proxyMediaUrl(target, carry = {}) {
+  const params = new URLSearchParams({ url: target });
+  if (carry.referer) params.set("referer", carry.referer);
+  if (carry.ua) params.set("ua", carry.ua);
+  return `/api/media-proxy?${params.toString()}`;
 }
 
 export function allowProxyUrl(target) {
@@ -73,7 +97,8 @@ export function isAllowedProxyHost(hostname) {
   );
 }
 
-export function rewriteM3u8(body, playlistUrl) {
+export function rewriteM3u8(body, playlistUrl, carry = {}) {
+  const playlistHeaders = getMediaHeaders(new URL(playlistUrl).hostname);
   return body
     .split(/\r?\n/)
     .map((line) => {
@@ -81,14 +106,26 @@ export function rewriteM3u8(body, playlistUrl) {
         return line.replace(/URI="([^"]+)"/g, (_, uri) => {
           const absolute = new URL(uri, playlistUrl).href;
           allowProxyUrl(absolute);
-          return `URI="${proxyMediaUrl(absolute)}"`;
+          inheritMediaHeaders(absolute, playlistHeaders);
+          return `URI="${proxyMediaUrl(absolute, carry)}"`;
         });
       }
       const absolute = new URL(line, playlistUrl).href;
       allowProxyUrl(absolute);
-      return proxyMediaUrl(absolute);
+      inheritMediaHeaders(absolute, playlistHeaders);
+      return proxyMediaUrl(absolute, carry);
     })
     .join("\n");
+}
+
+function inheritMediaHeaders(target, headers) {
+  if (!Object.keys(headers).length) return;
+  try {
+    const host = new URL(target).hostname;
+    if (!mediaHeadersByHost.has(host)) mediaHeadersByHost.set(host, headers);
+  } catch {
+    // ignore
+  }
 }
 
 export function buildStreamPayload(streamUrl, pageUrl, extraHeaders = {}) {
@@ -99,6 +136,7 @@ export function buildStreamPayload(streamUrl, pageUrl, extraHeaders = {}) {
   try {
     const host = new URL(streamUrl).hostname;
     proxyHosts.add(host);
+    registerMediaHeaders(streamUrl, extraHeaders);
     const params = new URLSearchParams({ url: streamUrl });
     const referer = extraHeaders.Referer || extraHeaders.referer;
     const userAgent = extraHeaders["User-Agent"] || extraHeaders["user-agent"];

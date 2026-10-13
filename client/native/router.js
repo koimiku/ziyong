@@ -6,26 +6,10 @@ import {
   playTokuzilla,
   searchTokuzilla,
 } from "./tokuzilla.js";
-import { watchSources } from "./shared.js";
+import { buildStreamPayload, watchSources } from "./shared.js";
 import { APP_VERSION } from "../version.js";
-import { DEFAULT_MIRU_REPO, parseMiruSourceId } from "./miru/config.js";
-import {
-  buildStreamPayload,
-  detailMiru,
-  resolveMiruPlay,
-  searchMiru,
-} from "./miru/adapter.js";
-import {
-  ensureMiruReady,
-  fetchRepoIndex,
-  getInstalledSources,
-  getMeta,
-  getRuntime,
-  installExtension,
-  listInstalledMeta,
-  uninstallExtension,
-} from "./miru/repo.js";
-import { parseKazumiSourceId } from "../kazumi/engine.js";
+import { parseKazumiSourceId, rulePlayPageUrl, rulePlayReferer } from "../kazumi/engine.js";
+import { resolveWithSniffFallback } from "./media-sniffer.js";
 import {
   detailKazumi,
   ensureKazumiReady,
@@ -37,6 +21,7 @@ import {
   listKazumiSources,
   resolveKazumiPlay,
   searchKazumi,
+  seedDefaultKazumiRules,
   uninstallKazumiRule,
 } from "./kazumi/store.js";
 
@@ -89,14 +74,6 @@ async function handleSourceSearch(url) {
   const query = String(url.searchParams.get("q") || "").trim();
   if (!sourceId || !query) return jsonResponse({ error: "Missing source or query" }, 400);
 
-  const miruPackage = parseMiruSourceId(sourceId);
-  if (miruPackage) {
-    await ensureMiruReady();
-    if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
-    const list = await searchMiru(miruPackage, query);
-    return jsonResponse({ source: sourceId, name: getMeta(miruPackage)?.name, list });
-  }
-
   const kazumiName = parseKazumiSourceId(sourceId);
   if (kazumiName) {
     await ensureKazumiReady();
@@ -121,13 +98,6 @@ async function handleSourceDetail(url) {
   const id = String(url.searchParams.get("id") || "").trim();
   if (!sourceId || !id) return jsonResponse({ error: "Missing source or id" }, 400);
 
-  const miruPackage = parseMiruSourceId(sourceId);
-  if (miruPackage) {
-    await ensureMiruReady();
-    if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
-    return jsonResponse(await detailMiru(miruPackage, id));
-  }
-
   const kazumiName = parseKazumiSourceId(sourceId);
   if (kazumiName) {
     await ensureKazumiReady();
@@ -150,22 +120,8 @@ async function handleSourcePlay(url) {
   const sourceId = url.searchParams.get("source") || "";
   const id = String(url.searchParams.get("id") || "").trim();
   const watch = String(url.searchParams.get("watch") || "");
-  const page = String(url.searchParams.get("page") || "");
   const sid = Number(url.searchParams.get("sid") || 1);
   const nid = Number(url.searchParams.get("nid") || url.searchParams.get("ep") || 1);
-
-  const miruPackage = parseMiruSourceId(sourceId);
-  if (miruPackage) {
-    if (!watch) return jsonResponse({ error: "Missing watch url" }, 400);
-    await ensureMiruReady();
-    if (!getMeta(miruPackage)) return jsonResponse({ error: "Unknown Miru source" }, 404);
-    try {
-      const stream = await resolveMiruPlay(miruPackage, watch, page);
-      return jsonResponse(stream);
-    } catch (error) {
-      return jsonResponse({ error: String(error?.message || error) }, 502);
-    }
-  }
 
   const kazumiName = parseKazumiSourceId(sourceId);
   if (kazumiName) {
@@ -173,8 +129,17 @@ async function handleSourcePlay(url) {
     await ensureKazumiReady();
     if (!getKazumiRule(kazumiName)) return jsonResponse({ error: "Unknown Kazumi rule" }, 404);
     try {
-      const found = await resolveKazumiPlay(kazumiName, watch);
-      return jsonResponse(buildStreamPayload(found.mediaUrl, found.pageUrl, found.headers));
+      const rule = getKazumiRule(kazumiName);
+      const pageUrl = rulePlayPageUrl(rule, watch);
+      const stream = await resolveWithSniffFallback(
+        async () => {
+          const found = await resolveKazumiPlay(kazumiName, watch);
+          return buildStreamPayload(found.mediaUrl, found.pageUrl, found.headers);
+        },
+        pageUrl,
+        rulePlayReferer(rule, pageUrl)
+      );
+      return jsonResponse(stream);
     } catch (error) {
       return jsonResponse({ error: String(error?.message || error) }, 502);
     }
@@ -189,7 +154,11 @@ async function handleSourcePlay(url) {
     const stream =
       source.type === "tokuzilla"
         ? await playTokuzilla(id, nid)
-        : await playMaccms(sourceId, id, sid, nid);
+        : await resolveWithSniffFallback(
+            () => playMaccms(sourceId, id, sid, nid),
+            source.playPageUrl(id, sid, nid),
+            `${source.origin}/`
+          );
     if (!stream.url && stream.pageUrl) {
       return jsonResponse(stream);
     }
@@ -221,51 +190,6 @@ async function handleWatchHistory(request) {
   }
 }
 
-async function handleMiruRepo(url) {
-  await ensureMiruReady();
-  const repoUrl = String(url.searchParams.get("repo") || DEFAULT_MIRU_REPO);
-  const index = await fetchRepoIndex(repoUrl);
-  const installed = new Set(listInstalledMeta().map((item) => item.package));
-  const list = index
-    .filter((item) => item.type === "bangumi")
-    .filter((item) => String(item.nsfw || "false").toLowerCase() !== "true")
-    .map((item) => ({
-      ...item,
-      installed: installed.has(item.package),
-    }));
-  return jsonResponse({ repo: repoUrl, list });
-}
-
-async function handleMiruInstalled() {
-  await ensureMiruReady();
-  return jsonResponse({
-    list: listInstalledMeta(),
-    sources: getInstalledSources(),
-  });
-}
-
-async function handleMiruSources() {
-  await ensureMiruReady();
-  return jsonResponse({ list: getInstalledSources() });
-}
-
-async function handleMiruInstall(url) {
-  const packageName = String(url.searchParams.get("package") || "").trim();
-  const repoUrl = String(url.searchParams.get("repo") || DEFAULT_MIRU_REPO);
-  if (!packageName) return jsonResponse({ error: "Missing package" }, 400);
-  await ensureMiruReady();
-  const meta = await installExtension(packageName, repoUrl);
-  return jsonResponse({ ok: true, meta, sources: getInstalledSources() });
-}
-
-async function handleMiruUninstall(url) {
-  const packageName = String(url.searchParams.get("package") || "").trim();
-  if (!packageName) return jsonResponse({ error: "Missing package" }, 400);
-  await ensureMiruReady();
-  uninstallExtension(packageName);
-  return jsonResponse({ ok: true, sources: getInstalledSources() });
-}
-
 async function handleKazumiRepo() {
   await ensureKazumiReady();
   const installed = new Set(listKazumiRules().map((item) => item.name));
@@ -284,6 +208,11 @@ async function handleKazumiInstalled() {
 async function handleKazumiSources() {
   await ensureKazumiReady();
   return jsonResponse({ list: listKazumiSources() });
+}
+
+async function handleKazumiSeed() {
+  const result = await seedDefaultKazumiRules();
+  return jsonResponse({ ok: true, ...result, sources: listKazumiSources() });
 }
 
 async function handleKazumiInstall(url) {
@@ -334,16 +263,6 @@ async function probeSourceHealth(sourceId) {
         return Array.isArray(list) && list.length > 0;
       }
 
-      const miruPackage = parseMiruSourceId(sourceId);
-      if (miruPackage) {
-        await ensureMiruReady();
-        if (!getRuntime(miruPackage)) {
-          throw new Error("扩展未加载");
-        }
-        const list = await searchMiru(miruPackage, HEALTH_QUERY);
-        return Array.isArray(list) && list.length > 0;
-      }
-
       const source = watchSources[sourceId];
       if (!source) throw new Error("未知片源");
 
@@ -367,10 +286,8 @@ async function handleSourceHealth(url) {
 }
 
 async function handleSourcesHealth(url) {
-  await ensureMiruReady().catch(() => {});
   await ensureKazumiReady().catch(() => {});
   const ids = Object.entries(watchSources).filter(([, source]) => source.kind === "online").map(([id]) => id);
-  ids.push(...listInstalledMeta().filter(meta => meta.type === "bangumi").map(meta => 'miru:' + meta.package));
   ids.push(...listKazumiSources().map(item => item.id));
   return jsonResponse({ list: await healthMonitor.checkAll(ids, { force: url?.searchParams.get("force") === "1" }) });
 }
@@ -386,7 +303,7 @@ export async function handleNativeApi(input, init = {}) {
         version: `${APP_VERSION}-android`,
         mode: "android-standalone",
         urls: [],
-        mobileHint: "安卓独立版：不依赖电脑，内置片源与 Miru 扩展可在手机本地使用。",
+        mobileHint: "安卓独立版：不依赖电脑，内置片源与 Kazumi 规则可在手机本地使用。",
       });
     }
 
@@ -399,13 +316,8 @@ export async function handleNativeApi(input, init = {}) {
     if (path === "/api/source-play") return handleSourcePlay(url);
     if (path === "/api/watch-history") return handleWatchHistory(request);
 
-    if (path === "/api/miru/repo") return handleMiruRepo(url);
-    if (path === "/api/miru/installed") return handleMiruInstalled();
-    if (path === "/api/miru/sources") return handleMiruSources();
-    if (path === "/api/miru/install") return handleMiruInstall(url);
-    if (path === "/api/miru/uninstall") return handleMiruUninstall(url);
-
     if (path === "/api/kazumi/repo") return handleKazumiRepo();
+    if (path === "/api/kazumi/seed") return handleKazumiSeed();
     if (path === "/api/kazumi/installed") return handleKazumiInstalled();
     if (path === "/api/kazumi/sources") return handleKazumiSources();
     if (path === "/api/kazumi/install") return handleKazumiInstall(url);
