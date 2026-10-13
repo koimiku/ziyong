@@ -109,6 +109,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
       episodes.map((entry) => ({ label: entry.label, nid: entry.nid })),
       state.episodeIndex
     );
+    episodeTabs.classList.toggle("is-text", hasTextEpisodes(episodes));
     updateChrome();
   }
 
@@ -307,7 +308,16 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", active ? "true" : "false");
     });
+    revealActiveEpisode();
     sourceChips.innerHTML = renderEpisodeSourceChips(entry, state.sourceIndex);
+  }
+
+  // Scrolls only the episode list, never the page.
+  function revealActiveEpisode() {
+    const active = episodeTabs.querySelector(".episode-tile.active");
+    if (!active || !episodeTabs.clientWidth) return;
+    episodeTabs.scrollLeft = active.offsetLeft - (episodeTabs.clientWidth - active.offsetWidth) / 2;
+    episodeTabs.scrollTop = active.offsetTop - (episodeTabs.clientHeight - active.offsetHeight) / 2;
   }
 
   function resetPlayHint() {
@@ -529,6 +539,16 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     selectSource(Number(button.dataset.sourceIndex));
   });
 
+  const episodeExpand = document.querySelector("[data-episode-expand]");
+  episodeExpand?.addEventListener("click", () => {
+    const section = episodeTabs.closest(".episode-selector");
+    const expanded = !section?.classList.contains("is-expanded");
+    section?.classList.toggle("is-expanded", expanded);
+    episodeExpand.textContent = expanded ? "收起" : "全部";
+    episodeExpand.setAttribute("aria-expanded", expanded ? "true" : "false");
+    requestAnimationFrame(revealActiveEpisode);
+  });
+
   document.querySelectorAll(".option-dropdown").forEach(bindOptionDropdown);
   if (!document.documentElement.dataset.optionDropdownBound) {
     document.documentElement.dataset.optionDropdownBound = "1";
@@ -695,21 +715,36 @@ function destroyAttachedHls(state) {
   }
 }
 
+const EPISODE_NUMBER = /^(?:第\s*)?0*(\d{1,4}(?:\.\d)?)\s*(?:集|话|話|回|期)?$|^(?:EP?|#)\s*0*(\d{1,4})$/i;
+
+function episodeNumber(label) {
+  const match = String(label || "").trim().match(EPISODE_NUMBER);
+  return match ? match[1] || match[2] : "";
+}
+
+export function hasTextEpisodes(episodes) {
+  return episodes.some((episode) => !episodeNumber(episode.label));
+}
+
 export function renderEpisodeTabs(episodes, activeIndex) {
   return episodes
-    .map(
-      (episode, index) => `
+    .map((episode, index) => {
+      const number = episodeNumber(episode.label);
+      const active = index === activeIndex;
+      return `
         <button
-          class="option-dropdown-item${index === activeIndex ? " active" : ""}"
+          class="episode-tile${active ? " active" : ""}"
           type="button"
           role="option"
-          aria-selected="${index === activeIndex ? "true" : "false"}"
+          aria-selected="${active ? "true" : "false"}"
+          title="${escapeHtml(episode.label)}"
           data-episode-index="${index}"
         >
-          ${escapeHtml(episode.label)}
+          <span>${escapeHtml(number || episode.label)}</span>
+          <i class="episode-playing" aria-hidden="true"><b></b><b></b><b></b></i>
         </button>
-      `
-    )
+      `;
+    })
     .join("");
 }
 

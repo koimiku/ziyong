@@ -28,7 +28,7 @@ function readLocal() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list.map(normalizeEntry).filter(Boolean) : [];
+    return Array.isArray(list) ? mergeLists(list) : [];
   } catch {
     return [];
   }
@@ -46,9 +46,9 @@ function mergeLists(...lists) {
   lists.flat().forEach((raw) => {
     const entry = normalizeEntry(raw);
     if (!entry) return;
-    const current = map.get(entry.id);
+    const current = map.get(String(entry.id));
     if (!current) {
-      map.set(entry.id, entry);
+      map.set(String(entry.id), entry);
       return;
     }
     const currentTime = Math.max(
@@ -59,7 +59,8 @@ function mergeLists(...lists) {
       Number(entry.watchedAt || 0),
       Number(entry.progress?.updatedAt || 0)
     );
-    map.set(entry.id, nextTime >= currentTime ? entry : current);
+    const [kept, other] = nextTime >= currentTime ? [entry, current] : [current, entry];
+    map.set(String(entry.id), kept.progress || !other.progress ? kept : { ...kept, progress: other.progress });
   });
 
   return [...map.values()]
@@ -223,7 +224,7 @@ export function getWatchHistoryForCurrentMode() {
 export function recordWatch(item, progressPatch = null) {
   if (!item?.id) return;
 
-  const previous = readLocal().find((row) => row.id === item.id);
+  const previous = readLocal().find((row) => String(row.id) === String(item.id));
   const entry = normalizeEntry({
     id: item.id,
     partition: item.partition || inferPartition(item),
@@ -244,13 +245,13 @@ export function recordWatch(item, progressPatch = null) {
       : previous?.progress || null,
   });
 
-  saveHistory([entry, ...readLocal().filter((row) => row.id !== item.id)]);
+  saveHistory([entry, ...readLocal().filter((row) => String(row.id) !== String(item.id))]);
 }
 
 export function recordWatchProgress(itemId, progressPatch) {
   if (!itemId || !progressPatch) return;
   const list = readLocal();
-  const index = list.findIndex((row) => row.id === itemId);
+  const index = list.findIndex((row) => String(row.id) === String(itemId));
   if (index < 0) return;
 
   const current = list[index];
@@ -278,13 +279,13 @@ export function recordWatchProgress(itemId, progressPatch) {
 
   import("./bangumi-sync.js")
     .then(({ scheduleBangumiProgressPush }) => {
-      scheduleBangumiProgressPush(itemId, list.find((row) => row.id === itemId)?.progress);
+      scheduleBangumiProgressPush(itemId, list.find((row) => String(row.id) === String(itemId))?.progress);
     })
     .catch(() => {});
 }
 
 export function getWatchProgress(itemId) {
-  return readLocal().find((row) => row.id === itemId)?.progress || null;
+  return readLocal().find((row) => String(row.id) === String(itemId))?.progress || null;
 }
 
 export function getProgressPercent(entry) {

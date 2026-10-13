@@ -10,7 +10,7 @@ import {
   renderEpisodeSourceChips,
   sourceOptionLabel,
 } from "./episode-sources.js";
-import { bindSourcePlayer, renderEpisodeTabs } from "./player.js";
+import { bindSourcePlayer, hasTextEpisodes, renderEpisodeTabs } from "./player.js";
 import { initializeMobile, syncMobileWatchState } from "./mobile.js";
 import {
   getSourceNamesText,
@@ -34,6 +34,8 @@ const SHEET_RESULT_LIMIT = 12;
 
 let activePlayerController = null;
 let lastCardOrigin = null;
+let returnPoster = null;
+let exitingDetail = false;
 
 document.addEventListener(
   "click",
@@ -41,16 +43,40 @@ document.addEventListener(
     const card = event.target.closest?.(".anime-card, .hero-card, .calendar-card");
     if (!card) return;
     const poster = card.querySelector("img") || card;
-    lastCardOrigin = { rect: poster.getBoundingClientRect(), time: performance.now() };
+    lastCardOrigin = {
+      rect: poster.getBoundingClientRect(),
+      time: performance.now(),
+      poster,
+      section: card.closest("section, .media-row")?.className,
+    };
   },
   true
 );
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function createCoverGhost(cover, rect) {
+  const ghost = cover.cloneNode();
+  ghost.removeAttribute("id");
+  ghost.className = "entry-cover-ghost";
+  Object.assign(ghost.style, {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+  });
+  document.body.append(ghost);
+  return ghost;
+}
 
 function playCardExpansion() {
   const origin = lastCardOrigin;
   lastCardOrigin = null;
   if (!origin || performance.now() - origin.time > 1500) return;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  returnPoster = origin;
+  if (prefersReducedMotion()) return;
   const page = detailPanel.querySelector(".entry-page");
   const cover = detailPanel.querySelector(".entry-cover");
   if (!page || !cover || typeof cover.animate !== "function") return;
@@ -58,16 +84,7 @@ function playCardExpansion() {
   const from = origin.rect;
   if (!target.width || !target.height || !from.width || !from.height) return;
 
-  const ghost = cover.cloneNode();
-  ghost.removeAttribute("id");
-  ghost.className = "entry-cover-ghost";
-  Object.assign(ghost.style, {
-    left: `${target.left}px`,
-    top: `${target.top}px`,
-    width: `${target.width}px`,
-    height: `${target.height}px`,
-  });
-  document.body.append(ghost);
+  const ghost = createCoverGhost(cover, target);
   page.classList.add("is-expanding");
   const dx = from.left - target.left;
   const dy = from.top - target.top;
@@ -109,7 +126,109 @@ export function stopActivePlayback() {
   });
 }
 
+// Reverse of the card expansion: the page sinks away while its cover flies back
+// into the card it was opened from.
 export function exitWatchMode() {
+  if (exitingDetail) return;
+  const page = detailPanel.querySelector(".entry-page");
+  if (!page || prefersReducedMotion() || typeof page.animate !== "function") {
+    finishExitWatchMode();
+    return;
+  }
+  exitingDetail = true;
+  stopActivePlayback();
+  document.body.classList.remove("source-sheet-open");
+
+  const cover = page.classList.contains("is-playing") ? null : page.querySelector(".entry-cover");
+  const coverRect = cover?.getBoundingClientRect();
+  const ghost = coverRect?.width ? createCoverGhost(cover, coverRect) : null;
+  if (ghost) cover.style.visibility = "hidden";
+
+  const fade = page.animate(
+    [
+      { opacity: 1, transform: "none" },
+      { opacity: 0, transform: "translateY(28px) scale(.985)" },
+    ],
+    { duration: 220, easing: "cubic-bezier(.3, 0, .8, .15)", fill: "forwards" }
+  );
+  fade.finished
+    .catch(() => {})
+    .then(() => {
+      exitingDetail = false;
+      finishExitWatchMode();
+      document.querySelector(".main-stage")?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 200,
+        easing: "ease-out",
+      });
+      if (ghost) flyCoverBack(ghost, coverRect);
+    });
+}
+
+function findReturnPoster(origin) {
+  if (!origin) return null;
+  if (origin.poster.isConnected) return origin.poster;
+  const src = origin.poster.getAttribute?.("src");
+  if (!src) return null;
+  let best = null;
+  let bestDistance = Infinity;
+  for (const img of document.querySelectorAll(".main-stage img")) {
+    if (img.getAttribute("src") !== src) continue;
+    const rect = img.getBoundingClientRect();
+    if (!rect.width) continue;
+    const sameSection = img.closest("section, .media-row")?.className === origin.section;
+    const distance =
+      Math.hypot(rect.left - origin.rect.left, rect.top - origin.rect.top) + (sameSection ? 0 : 1e5);
+    if (distance < bestDistance) {
+      best = img;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function flyCoverBack(ghost, from) {
+  const poster = findReturnPoster(returnPoster);
+  returnPoster = null;
+  const target = poster ? poster.getBoundingClientRect() : null;
+  const margin = target ? target.height / 4 : 0;
+  const visible =
+    target &&
+    target.width > 0 &&
+    target.top >= -margin &&
+    target.bottom <= window.innerHeight + margin;
+  if (!visible) {
+    const out = ghost.animate(
+      [
+        { opacity: 1, transform: "none" },
+        { opacity: 0, transform: "scale(.9)" },
+      ],
+      { duration: 200, easing: "ease-in", fill: "forwards" }
+    );
+    out.finished.catch(() => {}).then(() => ghost.remove());
+    return;
+  }
+  poster.style.visibility = "hidden";
+  const flight = ghost.animate(
+    [
+      { transform: "none", borderRadius: "14px" },
+      {
+        transform: `translate(${target.left - from.left}px, ${target.top - from.top}px) scale(${
+          target.width / from.width
+        }, ${target.height / from.height})`,
+        borderRadius: "12px",
+      },
+    ],
+    { duration: 420, easing: "cubic-bezier(.2, 0, 0, 1)", fill: "forwards" }
+  );
+  flight.finished
+    .catch(() => {})
+    .then(() => {
+      poster.style.visibility = "";
+      ghost.remove();
+    });
+}
+
+function finishExitWatchMode() {
   stopActivePlayback();
   document.body.classList.remove("source-sheet-open");
   appShell.classList.remove("is-watching");
@@ -125,6 +244,8 @@ export function exitWatchMode() {
 }
 
 export async function showDetails(item, options = {}) {
+  exitingDetail = false;
+  returnPoster = null;
   stopActivePlayback();
   document.body.classList.remove("source-sheet-open");
   recordWatch(item);
@@ -291,15 +412,44 @@ function startWatchFlow({ page, item, requestId, sources, queries, preset }) {
     });
   }
 
-  function backToDetail() {
-    openToken += 1;
+  async function backToDetail() {
+    const token = ++openToken;
     stopActivePlayback();
+    const body = page.querySelector(".entry-body");
+    if (body && !prefersReducedMotion() && typeof body.animate === "function") {
+      await body
+        .animate(
+          [
+            { opacity: 1, transform: "none" },
+            { opacity: 0, transform: "scale(.97)" },
+          ],
+          { duration: 180, easing: "cubic-bezier(.3, 0, .8, .15)" }
+        )
+        .finished.catch(() => {});
+      if (token !== openToken || !isCurrent()) return;
+    }
     page.classList.remove("is-playing");
     page.querySelector("#sourceSection").innerHTML = "";
     page.querySelector("#watchSupport").innerHTML = "";
     const label = page.querySelector("#startWatchLabel");
     const resume = getWatchProgress(item.id);
     if (label) label.textContent = startWatchLabel(resume);
+    if (!prefersReducedMotion()) {
+      page.querySelector(".entry-hero")?.animate(
+        [
+          { opacity: 0, transform: "translateY(-12px)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: 280, easing: "cubic-bezier(.05, .7, .1, 1)" }
+      );
+      body?.animate(
+        [
+          { opacity: 0, transform: "translateY(14px)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: 300, easing: "cubic-bezier(.05, .7, .1, 1)" }
+      );
+    }
   }
 
   page.addEventListener("click", (event) => {
@@ -491,18 +641,18 @@ function renderWatchPanels(playlist, episodeSourceMap, resume) {
         <div class="support-section-title">
           <strong>选集</strong>
           <span id="episodeCountLabel">${episodeSourceMap.length} 集</span>
+          <button class="episode-expand" type="button" data-episode-expand aria-expanded="false">全部</button>
         </div>
-        <div class="option-dropdown" id="episodeDropdown">
-          <button class="option-dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-            <span id="episodeDropdownValue">${escapeHtml(episodeEntry?.label || "选择集数")}</span>
-            <span class="option-dropdown-caret" aria-hidden="true"></span>
-          </button>
-          <div class="option-dropdown-menu" id="episodeTabs" role="listbox" hidden>
-            ${renderEpisodeTabs(
-              episodeSourceMap.map((entry) => ({ label: entry.label, nid: entry.nid })),
-              episodeIndex
-            )}
-          </div>
+        <div
+          class="episode-grid${hasTextEpisodes(episodeSourceMap) ? " is-text" : ""}"
+          id="episodeTabs"
+          role="listbox"
+          aria-label="选集"
+        >
+          ${renderEpisodeTabs(
+            episodeSourceMap.map((entry) => ({ label: entry.label, nid: entry.nid })),
+            episodeIndex
+          )}
         </div>
       </section>
 
