@@ -1,7 +1,7 @@
 {
-  "version": "1.5.1",
-  "name": "v1.5.1",
-  "notes": "安卓版换上和 Kazumi 一样的 mpv 原生播放器：几乎所有视频格式都能播；新增双击暂停、长按 2 倍速、左右滑动快进、全屏左右滑调亮度和音量；全屏自动横屏并带放大动画；看完自动播放下一集。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.1",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.1/app-release.apk"
+  "version": "1.5.2",
+  "name": "v1.5.2",
+  "notes": "修复 Android mpv 播放器导入路径及提示控件初始化顺序，恢复签名 APK 构建。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.2",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.2/app-release.apk"
 }
