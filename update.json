@@ -1,7 +1,7 @@
 {
-  "version": "1.4.5",
-  "name": "v1.4.5",
-  "notes": "年份、排序和主题改为应用内下拉；搜索栏和侧边栏加入打开与关闭动画。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.5",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.5/app-release.apk"
+  "version": "1.4.6",
+  "name": "v1.4.6",
+  "notes": "片源改用 Kazumi 规则并内置常用规则；打开番剧时逐个检索片源并可重试；直链失败时用隐藏网页截获视频地址；加入 Kazumi 风格动画；修复手机端长番名撑宽页面。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.6",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.6/app-release.apk"
 }
