@@ -1,7 +1,7 @@
 import { writeJson } from "./utils.mjs";
 
 const BANGUMI_ORIGIN = "https://api.bgm.tv";
-export const BANGUMI_APP_USER_AGENT = "ziyong/1.4.8 (https://github.com/koimiku/ziyong)";
+export const BANGUMI_APP_USER_AGENT = "ziyong/1.4.9 (https://github.com/koimiku/ziyong)";
 const DEFAULT_UA = BANGUMI_APP_USER_AGENT;
 
 function appUserAgent(request) {

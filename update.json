@@ -1,7 +1,7 @@
 {
-  "version": "1.4.8",
-  "name": "v1.4.8",
-  "notes": "界面改成 Kazumi 式简洁风格：海报卡片标题在下方、导航带文字和胶囊指示、筛选改为标签；选集改成哔哩哔哩式方块；返回时封面飞回卡片的退出动画；修复「继续观看」重复显示。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.8",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.8/app-release.apk"
+  "version": "1.4.9",
+  "name": "v1.4.9",
+  "notes": "网站验证改成 Kazumi 式：应用内弹出验证码对话框，输入后自动提交并重新检索，自动点击类验证无需操作；手机全屏播放改为横屏沉浸式，带淡入淡出动画，返回键先退出全屏。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.9",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.9/app-release.apk"
 }
