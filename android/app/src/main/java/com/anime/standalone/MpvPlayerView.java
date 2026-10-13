@@ -27,7 +27,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import dev.jdtech.MPVLib.MPVLib;
+import dev.jdtech.mpv.MPVLib;
 import java.util.Locale;
 
 // libmpv video surface plus Kazumi-style controls: tap toggles the bars, double tap
