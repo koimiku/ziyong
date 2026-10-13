@@ -1,7 +1,7 @@
 {
-  "version": "1.4.7",
-  "name": "v1.4.7",
-  "notes": "观看流程改成 Kazumi 式：自己选片源和搜索结果，播放页独立全屏，失败可重试或更换片源；网站要求验证时提示并可一键去验证；更新弹窗改为左取消右下载；修复部分规则无法检索。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.7",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.7/app-release.apk"
+  "version": "1.4.8",
+  "name": "v1.4.8",
+  "notes": "界面改成 Kazumi 式简洁风格：海报卡片标题在下方、导航带文字和胶囊指示、筛选改为标签；选集改成哔哩哔哩式方块；返回时封面飞回卡片的退出动画；修复「继续观看」重复显示。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.4.8",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.4.8/app-release.apk"
 }
