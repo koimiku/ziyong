@@ -1,7 +1,7 @@
 {
-  "version": "1.5.2",
-  "name": "v1.5.2",
-  "notes": "修复 Android mpv 播放器导入路径及提示控件初始化顺序，恢复签名 APK 构建。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.2",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.2/app-release.apk"
+  "version": "1.5.4",
+  "name": "v1.5.4",
+  "notes": "采用 Kazumi 风格的简洁绿色界面、三列海报与轻量详情页，修复播放器启动图背景遮挡。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.4",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.4/app-release.apk"
 }

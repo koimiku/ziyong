@@ -1,11 +1,21 @@
 /* Kazumi / Material 3 look: tonal surfaces instead of outlines, posters captioned
    underneath, labelled navigation with pill indicators, chips and underline tabs. */
 :root {
-  --m3-surface: color-mix(in srgb, var(--accent) 3%, #fdfcff);
-  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #fdfcff);
-  --m3-container: color-mix(in srgb, var(--accent) 8%, #fdfcff);
-  --m3-container-high: color-mix(in srgb, var(--accent) 11%, #fdfcff);
-  --m3-secondary-container: color-mix(in srgb, var(--accent) 20%, #fdfcff);
+  --accent: #426b3b;
+  --accent-2: #34572f;
+  --ink: #20251e;
+  --muted: #626b5e;
+  --surface: #fcfdf7;
+  --surface-2: #edf1e6;
+  --line: #dce3d5;
+  --accent-soft: #e0ecd8;
+  --tab-active-bg: #d7e8cd;
+  --input-bg: #f1f4eb;
+  --m3-surface: color-mix(in srgb, var(--accent) 3%, #f8faf2);
+  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #f8faf2);
+  --m3-container: color-mix(in srgb, var(--accent) 8%, #f8faf2);
+  --m3-container-high: color-mix(in srgb, var(--accent) 11%, #f8faf2);
+  --m3-secondary-container: color-mix(in srgb, var(--accent) 20%, #f8faf2);
   --m3-on-secondary-container: color-mix(in srgb, var(--accent) 72%, #000);
   --m3-outline: color-mix(in srgb, var(--ink) 18%, transparent);
   --m3-poster-shadow: 0 1px 3px rgba(20, 20, 40, .14);
@@ -15,6 +25,16 @@
   --panel-bg: var(--m3-surface);
 }
 [data-theme="dark"] {
+  --accent: #add39e;
+  --accent-2: #c3e6b5;
+  --ink: #e3e7dc;
+  --muted: #a7b09f;
+  --surface: #171c16;
+  --surface-2: #22291f;
+  --line: #343e30;
+  --accent-soft: #2c3c27;
+  --tab-active-bg: #354b2f;
+  --input-bg: #22291f;
   --m3-surface: color-mix(in srgb, var(--accent) 4%, #111318);
   --m3-container-low: color-mix(in srgb, var(--accent) 5%, #17191f);
   --m3-container: color-mix(in srgb, var(--accent) 7%, #1c1e24);
@@ -603,3 +623,87 @@ body { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {
   .kz-dialog, .kz-success-badge { transition: none; animation: none; }
 }
+
+/* Compact catalog, inspired by the supplied Kazumi reference. */
+body, button, input, select, textarea,
+h1, h2, h3, .stage-header-main h2, .mobile-header-title strong {
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: normal;
+}
+.main-stage { padding: 28px 32px; }
+.dashboard { gap: 28px; }
+.media-row-head { margin-bottom: 14px; }
+.media-row-meta { font-size: 12px; }
+#heroSection { position: relative; }
+#heroSection .media-row-head { padding-right: 64px; }
+#heroSection .media-row-meta { display: none; }
+#heroSection .media-row-footer { position: absolute; right: 0; top: -8px; margin: 0; }
+#heroSection .hero-more-button { min-height: 40px; padding: 0 10px; border: 0; background: transparent; color: var(--accent); box-shadow: none; }
+#heroSection .media-row-scroller { display: block; }
+#heroSection .media-row-nav { display: none; }
+#heroRow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; overflow: visible; padding: 0; }
+#heroRow .anime-card { width: auto; min-width: 0; }
+.anime-card, .calendar-card { border-radius: 14px; overflow: hidden; background: var(--m3-container-low); }
+.anime-card .poster, .calendar-card .poster { border-radius: 12px; box-shadow: none; }
+.anime-card:hover .poster, .calendar-card:hover .poster { transform: none; box-shadow: none; }
+.anime-card:hover, .calendar-card:hover { background: var(--m3-container); }
+.anime-card .card-body { padding: 8px 9px 10px; gap: 4px; }
+.anime-card h3 { font-size: 14px; font-weight: 500; min-height: 2.8em; }
+.anime-card .card-meta, .anime-card .card-footer { display: none; }
+.anime-card .continue-label { font-size: 11px; color: var(--muted); }
+.calendar-card-body { padding: 8px 9px 10px; }
+.calendar-card h3 { font-weight: 500; }
+.calendar-tabs button { flex: 1; min-width: 44px; padding: 0 6px; }
+.calendar-tabs button.active::after { left: 30%; right: 30%; }
+.entry-panel, .settings-card, .sources-panel, .source-card { box-shadow: none; border-color: transparent; }
+.entry-panel { padding: 16px; }
+.entry-topbar .watch-back { background: transparent; }
+.entry-hero-backdrop { opacity: .15; }
+.entry-hero-info h1 { line-height: 1.4; }
+.entry-cover { box-shadow: none; }
+.entry-stats .stat { background: transparent; border: 1px solid var(--m3-outline); border-radius: 20px; }
+.support-section-title { font-size: 15px; }
+.episode-tile { min-height: 44px; border-radius: 12px; }
+.option-dropdown-trigger { box-shadow: none; border-color: var(--m3-outline); border-radius: 12px; }
+.settings-view { max-width: 800px; margin-inline: auto; gap: 12px; }
+.settings-card { padding: 20px; border-radius: 18px; }
+.settings-card h2 { font-size: 17px; font-weight: 600; }
+.settings-card p, .settings-card li { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.source-health-summary { background: var(--m3-container-low); border: 0; box-shadow: none; }
+.source-card:hover { transform: none; box-shadow: none; }
+.small-button, .settings-action, .sources-page-actions button { border-radius: 24px; box-shadow: none; }
+.mobile-drawer, .search-dialog, .app-update-card { background: var(--m3-surface); }
+body:not(.is-searching):not(.is-browsing-hero) #statusLine:not(.is-error) { display: none; }
+@media (min-width: 781px) and (max-width: 1100px) {
+  #heroRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 780px) {
+  body.is-mobile .main-stage { padding: 12px 12px 100px; }
+  body.is-mobile .dashboard { gap: 24px; }
+  .mobile-header { height: 64px; padding-inline: 12px; }
+  .mobile-header-title strong { font-size: 20px; font-weight: 600; }
+  .mobile-header .icon-button { min-width: 44px; min-height: 44px; }
+  .mobile-nav { padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  body.is-mobile #heroRow, body.is-mobile .recommend-grid, body.is-mobile .results-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px;
+  }
+  body.is-mobile #heroRow .anime-card { width: auto; }
+  body.is-mobile .anime-card h3, body.is-mobile .calendar-card h3 { font-size: 13px; line-height: 1.45; }
+  body.is-mobile .anime-card .card-body { padding: 7px 7px 9px; }
+  body.is-mobile .media-row-head h3 { font-size: 18px; font-weight: 600; }
+  .media-row-track { scrollbar-width: none; }
+  .media-row-track::-webkit-scrollbar { display: none; }
+  body.is-mobile .entry-hero-content { padding: 20px 16px; gap: 16px; }
+  body.is-mobile .entry-panel { padding: 14px; border-radius: 16px; }
+  body.is-mobile .entry-hero-info h1 { font-size: 21px; }
+  body.is-mobile .settings-card { padding: 18px; }
+  body.is-mobile.mobile-watching .main-stage { padding: 0; }
+  .source-player .player-meta { font-size: 12px; line-height: 1.5; padding: 10px 14px; }
+}
+@media (max-width: 350px) {
+  body.is-mobile #heroRow, body.is-mobile .recommend-grid, body.is-mobile .results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.start-watch-button, .start-watch-button:hover { box-shadow: none; border-radius: 28px; }
+.anime-card.has-progress .card-footer { display: block; }
+.anime-card.has-progress .score { display: none; }
+.anime-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

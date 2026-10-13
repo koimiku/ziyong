@@ -22,7 +22,6 @@ import {
   cardTemplate,
   continueCount,
   continueRow,
-  heroCardTemplate,
   heroCount,
   heroMoreButton,
   heroRow,
@@ -37,7 +36,7 @@ import { pickDisplayTitle } from "./utils.js";
 import { getWatchHistoryForCurrentMode, getProgressPercent, formatProgressLabel, resolveHistoryItems } from "./watch-history.js";
 import { showDetails } from "./watch.js";
 
-const HERO_PREVIEW = 3;
+const HERO_PREVIEW = 6;
 
 function getHeroSource(items) {
   const ranked = rankItems(items);
@@ -240,7 +239,7 @@ function renderDashboard(items) {
   ]);
   const recommendItems = ranked.filter((item) => !usedIds.has(item.id));
 
-  heroItems.forEach((item) => heroRow.append(createHeroCard(item)));
+  heroItems.forEach((item) => heroRow.append(createPortraitCard(item)));
   continueItems.forEach((item) => continueRow.append(createPortraitCard(item, { continue: true })));
   recommendItems.forEach((item) => recommendGrid.append(createPortraitCard(item)));
 
@@ -252,7 +251,7 @@ function renderDashboard(items) {
     continueCount.textContent = `${continueItems.length} 部最近观看`;
     document.querySelector("#continueSection")?.removeAttribute("hidden");
   } else {
-    continueCount.textContent = "还没有记录";
+    document.querySelector("#continueSection")?.setAttribute("hidden", "");
     continueRow.innerHTML = `<p class="inline-empty">${
       isTokusatsuMode()
         ? "点进特摄开始观看后，会出现在这里。"
@@ -390,18 +389,15 @@ function createPortraitCard(item, options = {}) {
     event.stopPropagation();
     openDetails();
   });
-  card.addEventListener("click", openDetails);
-  return card;
-}
-
-function createHeroCard(item) {
-  const card = heroCardTemplate.content.firstElementChild.cloneNode(true);
-  fillCard(card, item);
-  card.querySelector(".card-play, .hero-play")?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    showDetails(item);
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", pickDisplayTitle(item));
+  card.addEventListener("keydown", (event) => {
+    if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    openDetails();
   });
-  card.addEventListener("click", () => showDetails(item));
+  card.addEventListener("click", openDetails);
   return card;
 }
 
