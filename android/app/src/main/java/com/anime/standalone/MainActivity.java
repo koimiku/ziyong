@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ApkUpdaterPlugin.class);
         registerPlugin(MediaSnifferPlugin.class);
+        registerPlugin(NativePlayerPlugin.class);
         super.onCreate(savedInstanceState);
         bridge.getWebView().setWebChromeClient(new FullscreenChromeClient(bridge));
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);

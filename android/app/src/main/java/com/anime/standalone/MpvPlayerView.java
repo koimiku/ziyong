@@ -1,0 +1,791 @@
+package com.anime.standalone;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.SurfaceTexture;
+import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.util.TypedValue;
+import android.view.GestureDetector;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.Surface;
+import android.view.TextureView;
+import android.view.View;
+import android.view.ViewConfiguration;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import dev.jdtech.mpv.MPVLib;
+import java.util.Locale;
+
+// libmpv video surface plus Kazumi-style controls: tap toggles the bars, double tap
+// pauses, long press plays at 2x, horizontal drag seeks, and in fullscreen the left
+// and right halves adjust brightness and volume.
+public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTextureListener, MPVLib.EventObserver {
+
+    public interface Listener {
+        void onLoaded(double duration);
+        void onLoadFailed(String message);
+        void onProgress(double position, double duration, boolean paused);
+        void onEnded();
+        void onNextRequested();
+        void onFullscreenRequested(boolean value);
+        void onBackRequested();
+    }
+
+    private static final int ACCENT = Color.parseColor("#5B8CFF");
+    private static final long HIDE_DELAY_MS = 3500;
+    private static final long PROGRESS_POST_MS = 250;
+    private static final float[] SPEEDS = {0.75f, 1f, 1.25f, 1.5f, 2f};
+    private static final int SEEK_MAX = 1000;
+
+    private static final int GESTURE_NONE = 0;
+    private static final int GESTURE_SEEK = 1;
+    private static final int GESTURE_BRIGHTNESS = 2;
+    private static final int GESTURE_VOLUME = 3;
+    private static final int GESTURE_IGNORED = 4;
+
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Listener listener;
+    private final TextureView texture;
+    private final LinearLayout topBar;
+    private final LinearLayout bottomBar;
+    private final ImageButton backButton;
+    private final ImageButton playButton;
+    private final ImageButton nextButton;
+    private final ImageButton fullscreenButton;
+    private final TextView titleView;
+    private final TextView positionView;
+    private final TextView durationView;
+    private final TextView speedView;
+    private final TextView hintView;
+    private final SeekBar seekBar;
+    private final ProgressBar spinner;
+    private final GestureDetector gestures;
+    private final int touchSlop;
+    private final Runnable hideControlsTask = this::hideControls;
+    private final Runnable hideHintTask = () -> this.hintView.setVisibility(View.GONE);
+
+    private MPVLib mpv;
+    private Surface surface;
+    private String pendingUrl;
+    private boolean loading;
+    private boolean awaitingStart;
+    private boolean fullscreen;
+    private boolean hasNext;
+    private boolean controlsVisible = true;
+    private boolean userSeeking;
+    private boolean paused = true;
+    private boolean buffering;
+    private boolean ended;
+    private double position;
+    private double duration;
+    private float speed = 1f;
+    private boolean speedBoost;
+    private volatile long lastTimePost;
+
+    private int gestureMode = GESTURE_NONE;
+    private double gestureStartPosition;
+    private double seekTarget;
+    private float gestureStartBrightness;
+    private int gestureStartVolume;
+
+    public MpvPlayerView(Activity activity, Listener listener) {
+        super(activity);
+        this.listener = listener;
+        touchSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
+        setBackgroundColor(Color.BLACK);
+        setClickable(true);
+
+        texture = new TextureView(activity);
+        texture.setSurfaceTextureListener(this);
+        addView(texture, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+
+        spinner = new ProgressBar(activity);
+        spinner.setIndeterminateTintList(ColorStateList.valueOf(Color.WHITE));
+        spinner.setVisibility(View.GONE);
+        addView(spinner, new LayoutParams(dp(42), dp(42), Gravity.CENTER));
+
+        hintView = new TextView(activity);
+        hintView.setTextColor(Color.WHITE);
+        hintView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        hintView.setPadding(dp(14), dp(7), dp(14), dp(7));
+        hintView.setBackground(pill(0x99000000, dp(18)));
+        hintView.setVisibility(View.GONE);
+        LayoutParams hintParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP);
+        hintParams.topMargin = dp(40);
+        addView(hintView, hintParams);
+
+        topBar = new LinearLayout(activity);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setClickable(true);
+        topBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {0x99000000, 0x00000000}));
+        backButton = iconButton(R.drawable.mpv_ic_back, "返回");
+        backButton.setOnClickListener((v) -> {
+            if (fullscreen) listener.onFullscreenRequested(false);
+            else listener.onBackRequested();
+        });
+        topBar.addView(backButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        titleView = label(15);
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(TextUtils.TruncateAt.END);
+        titleView.setVisibility(View.GONE);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+        titleParams.leftMargin = dp(4);
+        topBar.addView(titleView, titleParams);
+        addView(topBar, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP));
+
+        bottomBar = new LinearLayout(activity);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
+        bottomBar.setClickable(true);
+        bottomBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, new int[] {0xAA000000, 0x00000000}));
+
+        playButton = iconButton(R.drawable.mpv_ic_play, "播放");
+        playButton.setOnClickListener((v) -> togglePause());
+        bottomBar.addView(playButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        nextButton = iconButton(R.drawable.mpv_ic_next, "下一集");
+        nextButton.setOnClickListener((v) -> listener.onNextRequested());
+        nextButton.setVisibility(View.GONE);
+        bottomBar.addView(nextButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        positionView = label(12);
+        positionView.setText(formatTime(0));
+        LinearLayout.LayoutParams positionParams = new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+        positionParams.leftMargin = dp(4);
+        bottomBar.addView(positionView, positionParams);
+
+        seekBar = new SeekBar(activity);
+        seekBar.setMax(SEEK_MAX);
+        seekBar.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        seekBar.setThumbTintList(ColorStateList.valueOf(ACCENT));
+        seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(0x66FFFFFF));
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                if (fromUser && duration > 0) positionView.setText(formatTime(duration * progress / SEEK_MAX));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar bar) {
+                userSeeking = true;
+                main.removeCallbacks(hideControlsTask);
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar bar) {
+                userSeeking = false;
+                if (duration > 0) seekTo(duration * bar.getProgress() / SEEK_MAX);
+                scheduleHide();
+            }
+        });
+        bottomBar.addView(seekBar, new LinearLayout.LayoutParams(0, dp(36), 1f));
+
+        durationView = label(12);
+        durationView.setText(formatTime(0));
+        bottomBar.addView(durationView, new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+        speedView = label(13);
+        speedView.setGravity(Gravity.CENTER);
+        speedView.setText("倍速");
+        speedView.setPadding(dp(10), dp(8), dp(6), dp(8));
+        speedView.setOnClickListener((v) -> cycleSpeed());
+        bottomBar.addView(speedView, new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+        fullscreenButton = iconButton(R.drawable.mpv_ic_fullscreen, "全屏");
+        fullscreenButton.setOnClickListener((v) -> listener.onFullscreenRequested(!fullscreen));
+        bottomBar.addView(fullscreenButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        addView(bottomBar, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+
+        gestures = new GestureDetector(activity, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDown(MotionEvent event) {
+                return true;
+            }
+
+            @Override
+            public boolean onSingleTapConfirmed(MotionEvent event) {
+                if (controlsVisible) hideControls();
+                else showControls();
+                return true;
+            }
+
+            @Override
+            public boolean onDoubleTap(MotionEvent event) {
+                togglePause();
+                showControls();
+                return true;
+            }
+
+            @Override
+            public void onLongPress(MotionEvent event) {
+                if (paused || loading || gestureMode != GESTURE_NONE) return;
+                speedBoost = true;
+                setMpvSpeed(2f);
+                showHint("2 倍速播放中", 0);
+            }
+
+            @Override
+            public boolean onScroll(MotionEvent start, MotionEvent event, float dx, float dy) {
+                if (start == null || speedBoost) return false;
+                handleDrag(start, event);
+                return true;
+            }
+        });
+        applyChrome();
+    }
+
+    public boolean start() {
+        try {
+            mpv = MPVLib.create(getContext().getApplicationContext());
+            mpv.setOptionString("vo", "gpu");
+            mpv.setOptionString("gpu-context", "android");
+            mpv.setOptionString("opengl-es", "yes");
+            mpv.setOptionString("hwdec", "mediacodec-copy");
+            mpv.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
+            mpv.setOptionString("ao", "audiotrack,opensles");
+            mpv.setOptionString("tls-verify", "no");
+            mpv.setOptionString("cache", "yes");
+            mpv.setOptionString("demuxer-max-bytes", "64MiB");
+            mpv.setOptionString("demuxer-max-back-bytes", "32MiB");
+            mpv.setOptionString("network-timeout", "20");
+            mpv.setOptionString("keep-open", "yes");
+            mpv.setOptionString("input-default-bindings", "no");
+            mpv.setOptionString("ytdl", "no");
+            mpv.init();
+            mpv.setOptionString("force-window", "no");
+            mpv.setOptionString("idle", "yes");
+            mpv.addObserver(this);
+            mpv.observeProperty("time-pos", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE);
+            mpv.observeProperty("duration", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE);
+            mpv.observeProperty("pause", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
+            mpv.observeProperty("paused-for-cache", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
+            mpv.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
+            return true;
+        } catch (Throwable error) {
+            mpv = null;
+            return false;
+        }
+    }
+
+    public void release() {
+        main.removeCallbacksAndMessages(null);
+        MPVLib instance = mpv;
+        mpv = null;
+        if (instance == null) return;
+        try {
+            instance.removeObserver(this);
+            if (surface != null) {
+                instance.setPropertyString("vo", "null");
+                instance.detachSurface();
+            }
+            instance.destroy();
+        } catch (Throwable ignored) {
+            // already gone
+        }
+        if (surface != null) {
+            surface.release();
+            surface = null;
+        }
+    }
+
+    public void load(String url, String userAgent, String referer, String headerFields, double startAt) {
+        if (mpv == null) return;
+        loading = true;
+        awaitingStart = true;
+        ended = false;
+        buffering = false;
+        position = Math.max(0, startAt);
+        duration = 0;
+        setProperty("user-agent", userAgent == null ? "" : userAgent);
+        setProperty("referrer", referer == null ? "" : referer);
+        setProperty("http-header-fields", headerFields == null ? "" : headerFields);
+        setProperty("start", startAt > 1 ? String.format(Locale.US, "%.2f", startAt) : "none");
+        try {
+            mpv.setPropertyBoolean("pause", false);
+        } catch (Throwable ignored) {
+            // set on the next file
+        }
+        if (surface == null) pendingUrl = url;
+        else command("loadfile", url);
+        updateProgressViews();
+        updateSpinner();
+        showControls();
+    }
+
+    public void stop() {
+        loading = false;
+        pendingUrl = null;
+        ended = false;
+        position = 0;
+        duration = 0;
+        restoreSpeed();
+        if (mpv != null) command("stop");
+        updateSpinner();
+    }
+
+    public void play() {
+        if (mpv == null) return;
+        if (ended) {
+            ended = false;
+            command("seek", "0", "absolute");
+        }
+        setPause(false);
+    }
+
+    public void pause() {
+        setPause(true);
+    }
+
+    public void seekTo(double seconds) {
+        if (mpv == null) return;
+        double target = duration > 0 ? Math.min(Math.max(0, seconds), Math.max(0, duration - 1)) : Math.max(0, seconds);
+        ended = false;
+        position = target;
+        command("seek", String.format(Locale.US, "%.2f", target), "absolute");
+        updateProgressViews();
+    }
+
+    public boolean isPaused() {
+        return paused;
+    }
+
+    public double getPosition() {
+        return position;
+    }
+
+    public double getDuration() {
+        return duration;
+    }
+
+    public void setTitle(String title) {
+        titleView.setText(title == null ? "" : title);
+    }
+
+    public void setHasNext(boolean value) {
+        hasNext = value;
+        applyChrome();
+    }
+
+    public void setFullscreen(boolean value) {
+        fullscreen = value;
+        applyChrome();
+        showControls();
+    }
+
+    public void resetBrightness() {
+        if (!(getContext() instanceof Activity)) return;
+        android.view.Window window = ((Activity) getContext()).getWindow();
+        WindowManager.LayoutParams attrs = window.getAttributes();
+        attrs.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        window.setAttributes(attrs);
+    }
+
+    // --- mpv surface ---
+
+    @Override
+    public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+        if (mpv == null) return;
+        surface = new Surface(texture);
+        try {
+            mpv.attachSurface(surface);
+            mpv.setOptionString("force-window", "yes");
+            setProperty("android-surface-size", width + "x" + height);
+            if (pendingUrl != null) {
+                command("loadfile", pendingUrl);
+                pendingUrl = null;
+            } else {
+                setProperty("vo", "gpu");
+            }
+        } catch (Throwable ignored) {
+            // surface will be retried on the next attach
+        }
+    }
+
+    @Override
+    public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
+        setProperty("android-surface-size", width + "x" + height);
+    }
+
+    @Override
+    public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
+        if (mpv != null) {
+            try {
+                setProperty("vo", "null");
+                mpv.setOptionString("force-window", "no");
+                mpv.detachSurface();
+            } catch (Throwable ignored) {
+                // instance is shutting down
+            }
+        }
+        if (surface != null) {
+            surface.release();
+            surface = null;
+        }
+        return true;
+    }
+
+    @Override
+    public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
+
+    // --- mpv events (called on mpv's event thread) ---
+
+    @Override
+    public void eventProperty(String name) {}
+
+    @Override
+    public void eventProperty(String name, long value) {}
+
+    @Override
+    public void eventProperty(String name, String value) {}
+
+    @Override
+    public void eventProperty(String name, double value) {
+        if ("time-pos".equals(name)) {
+            long now = SystemClock.uptimeMillis();
+            if (now - lastTimePost < PROGRESS_POST_MS) return;
+            lastTimePost = now;
+        }
+        main.post(() -> {
+            if (mpv == null) return;
+            if ("time-pos".equals(name)) {
+                if (gestureMode != GESTURE_SEEK) position = value;
+            } else if ("duration".equals(name)) {
+                duration = value;
+            }
+            updateProgressViews();
+            listener.onProgress(position, duration, paused);
+        });
+    }
+
+    @Override
+    public void eventProperty(String name, boolean value) {
+        main.post(() -> {
+            if (mpv == null) return;
+            switch (name) {
+                case "pause":
+                    paused = value;
+                    setKeepScreenOn(!value);
+                    playButton.setImageResource(value ? R.drawable.mpv_ic_play : R.drawable.mpv_ic_pause);
+                    playButton.setContentDescription(value ? "播放" : "暂停");
+                    if (value) {
+                        restoreSpeed();
+                        showControls();
+                    } else {
+                        scheduleHide();
+                    }
+                    listener.onProgress(position, duration, paused);
+                    break;
+                case "paused-for-cache":
+                    buffering = value;
+                    updateSpinner();
+                    break;
+                case "eof-reached":
+                    if (value && !loading && !ended) {
+                        ended = true;
+                        showControls();
+                        listener.onEnded();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        });
+    }
+
+    @Override
+    public void event(int id) {
+        main.post(() -> {
+            if (mpv == null) return;
+            if (id == MPVLib.MpvEvent.MPV_EVENT_START_FILE) {
+                awaitingStart = false;
+            } else if (id == MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED) {
+                if (!loading) return;
+                loading = false;
+                Double length = null;
+                try {
+                    length = mpv.getPropertyDouble("duration");
+                } catch (Throwable ignored) {
+                    // live or unknown length
+                }
+                if (length != null) duration = length;
+                updateProgressViews();
+                updateSpinner();
+                listener.onLoaded(duration);
+            } else if (id == MPVLib.MpvEvent.MPV_EVENT_END_FILE) {
+                if (!loading || awaitingStart) return;
+                loading = false;
+                updateSpinner();
+                listener.onLoadFailed("视频加载失败，请换片源");
+            } else if (id == MPVLib.MpvEvent.MPV_EVENT_PLAYBACK_RESTART) {
+                buffering = false;
+                updateSpinner();
+            }
+        });
+    }
+
+    // --- gestures ---
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        gestures.onTouchEvent(event);
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) finishGesture();
+        return true;
+    }
+
+    private void handleDrag(MotionEvent start, MotionEvent event) {
+        float dx = event.getX() - start.getX();
+        float dy = event.getY() - start.getY();
+        if (gestureMode == GESTURE_NONE) {
+            if (Math.abs(dx) < touchSlop && Math.abs(dy) < touchSlop) return;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                gestureMode = duration > 0 && !loading ? GESTURE_SEEK : GESTURE_IGNORED;
+                gestureStartPosition = position;
+                seekTarget = position;
+            } else if (fullscreen) {
+                gestureMode = start.getX() < getWidth() / 2f ? GESTURE_BRIGHTNESS : GESTURE_VOLUME;
+                gestureStartBrightness = currentBrightness();
+                gestureStartVolume = audio().getStreamVolume(AudioManager.STREAM_MUSIC);
+            } else {
+                gestureMode = GESTURE_IGNORED;
+            }
+        }
+        float width = Math.max(1, getWidth());
+        float height = Math.max(1, getHeight());
+        switch (gestureMode) {
+            case GESTURE_SEEK: {
+                double span = Math.min(duration, 180);
+                seekTarget = Math.min(Math.max(0, gestureStartPosition + dx / width * span), duration);
+                position = seekTarget;
+                updateProgressViews();
+                showHint(formatTime(seekTarget) + " / " + formatTime(duration), 0);
+                break;
+            }
+            case GESTURE_BRIGHTNESS: {
+                float value = Math.min(1f, Math.max(0.01f, gestureStartBrightness - dy / height));
+                Activity activity = (Activity) getContext();
+                WindowManager.LayoutParams attrs = activity.getWindow().getAttributes();
+                attrs.screenBrightness = value;
+                activity.getWindow().setAttributes(attrs);
+                showHint("亮度 " + Math.round(value * 100) + "%", 0);
+                break;
+            }
+            case GESTURE_VOLUME: {
+                AudioManager audio = audio();
+                int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                int value = Math.min(max, Math.max(0, Math.round(gestureStartVolume - dy / height * max * 1.2f)));
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, value, 0);
+                showHint("音量 " + Math.round(value * 100f / Math.max(1, max)) + "%", 0);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    private void finishGesture() {
+        if (speedBoost) {
+            restoreSpeed();
+            showHint(null, 0);
+        }
+        if (gestureMode == GESTURE_SEEK) seekTo(seekTarget);
+        if (gestureMode != GESTURE_NONE) showHint(null, 500);
+        gestureMode = GESTURE_NONE;
+    }
+
+    private float currentBrightness() {
+        Activity activity = (Activity) getContext();
+        float value = activity.getWindow().getAttributes().screenBrightness;
+        if (value >= 0) return value;
+        try {
+            return Settings.System.getInt(activity.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS) / 255f;
+        } catch (Settings.SettingNotFoundException error) {
+            return 0.5f;
+        }
+    }
+
+    private AudioManager audio() {
+        return (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    // --- controls ---
+
+    private void togglePause() {
+        if (paused) play();
+        else pause();
+    }
+
+    private void setPause(boolean value) {
+        if (mpv == null) return;
+        try {
+            mpv.setPropertyBoolean("pause", value);
+        } catch (Throwable ignored) {
+            // no file loaded
+        }
+    }
+
+    private void cycleSpeed() {
+        int index = 0;
+        for (int i = 0; i < SPEEDS.length; i++) {
+            if (Math.abs(SPEEDS[i] - speed) < 0.01f) index = i;
+        }
+        speed = SPEEDS[(index + 1) % SPEEDS.length];
+        setMpvSpeed(speed);
+        speedView.setText(Math.abs(speed - 1f) < 0.01f ? "倍速" : trimSpeed(speed) + "x");
+        showHint(trimSpeed(speed) + "x 倍速", 900);
+        scheduleHide();
+    }
+
+    private void restoreSpeed() {
+        if (!speedBoost) return;
+        speedBoost = false;
+        setMpvSpeed(speed);
+    }
+
+    private void setMpvSpeed(float value) {
+        if (mpv == null) return;
+        try {
+            mpv.setPropertyDouble("speed", value);
+        } catch (Throwable ignored) {
+            // no file loaded
+        }
+    }
+
+    private void showControls() {
+        controlsVisible = true;
+        fade(topBar, true);
+        fade(bottomBar, true);
+        scheduleHide();
+    }
+
+    private void hideControls() {
+        if (paused || userSeeking || loading) return;
+        controlsVisible = false;
+        fade(topBar, false);
+        fade(bottomBar, false);
+    }
+
+    private void scheduleHide() {
+        main.removeCallbacks(hideControlsTask);
+        if (!paused) main.postDelayed(hideControlsTask, HIDE_DELAY_MS);
+    }
+
+    private void fade(View view, boolean visible) {
+        view.animate().cancel();
+        if (visible) {
+            view.setVisibility(View.VISIBLE);
+            view.animate().alpha(1f).setDuration(160).start();
+        } else {
+            view.animate().alpha(0f).setDuration(200).withEndAction(() -> view.setVisibility(View.INVISIBLE)).start();
+        }
+    }
+
+    private void showHint(String text, long hideAfterMs) {
+        main.removeCallbacks(hideHintTask);
+        if (text != null) {
+            hintView.setText(text);
+            hintView.setVisibility(View.VISIBLE);
+        }
+        if (text == null || hideAfterMs > 0) main.postDelayed(hideHintTask, Math.max(0, hideAfterMs));
+    }
+
+    private void updateSpinner() {
+        spinner.setVisibility(loading || buffering ? View.VISIBLE : View.GONE);
+    }
+
+    private void updateProgressViews() {
+        durationView.setText(formatTime(duration));
+        if (!userSeeking) {
+            positionView.setText(formatTime(position));
+            seekBar.setProgress(duration > 0 ? (int) Math.round(position / duration * SEEK_MAX) : 0);
+        }
+    }
+
+    private void applyChrome() {
+        nextButton.setVisibility(hasNext ? View.VISIBLE : View.GONE);
+        titleView.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
+        fullscreenButton.setImageResource(fullscreen ? R.drawable.mpv_ic_fullscreen_exit : R.drawable.mpv_ic_fullscreen);
+        fullscreenButton.setContentDescription(fullscreen ? "退出全屏" : "全屏");
+        int side = fullscreen ? dp(28) : dp(4);
+        topBar.setPadding(side, fullscreen ? dp(10) : dp(4), side, dp(10));
+        bottomBar.setPadding(side, dp(14), side, fullscreen ? dp(10) : dp(2));
+    }
+
+    private ImageButton iconButton(int icon, String description) {
+        ImageButton button = new ImageButton(getContext());
+        button.setImageResource(icon);
+        button.setContentDescription(description);
+        button.setScaleType(ImageButton.ScaleType.CENTER);
+        TypedValue ripple = new TypedValue();
+        getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true);
+        if (ripple.resourceId != 0) button.setBackgroundResource(ripple.resourceId);
+        else button.setBackgroundColor(Color.TRANSPARENT);
+        return button;
+    }
+
+    private TextView label(int sizeSp) {
+        TextView view = new TextView(getContext());
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp);
+        return view;
+    }
+
+    private static GradientDrawable pill(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        return drawable;
+    }
+
+    private void setProperty(String name, String value) {
+        if (mpv == null) return;
+        try {
+            mpv.setPropertyString(name, value);
+        } catch (Throwable ignored) {
+            // unsupported in this build
+        }
+    }
+
+    private void command(String... args) {
+        if (mpv == null) return;
+        try {
+            mpv.command(args);
+        } catch (Throwable ignored) {
+            // rejected by mpv
+        }
+    }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static String trimSpeed(float value) {
+        return value == Math.floor(value) ? String.format(Locale.US, "%.1f", value) : String.valueOf(value);
+    }
+
+    static String formatTime(double seconds) {
+        long total = seconds > 0 && !Double.isInfinite(seconds) ? (long) seconds : 0;
+        long hours = total / 3600;
+        long minutes = (total % 3600) / 60;
+        long secs = total % 60;
+        return hours > 0
+            ? String.format(Locale.US, "%d:%02d:%02d", hours, minutes, secs)
+            : String.format(Locale.US, "%02d:%02d", minutes, secs);
+    }
+}

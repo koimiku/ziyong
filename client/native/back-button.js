@@ -4,6 +4,7 @@ import { goToExplore } from "../explore-nav.js";
 import { exitWatchMode } from "../watch.js";
 import { appShell } from "../dom.js";
 import { isAndroidStandalone } from "./install.js";
+import { exitNativeFullscreen } from "./native-player.js";
 
 let installed = false;
 
@@ -22,6 +23,8 @@ export function initializeAndroidBackButton() {
 }
 
 function handleAndroidBack(App) {
+  if (exitNativeFullscreen()) return;
+
   const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
   if (fullscreen) {
     (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);

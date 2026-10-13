@@ -2,6 +2,7 @@ import { renderEpisodeSourceChips, sourceOptionLabel } from "./episode-sources.j
 import { recordWatchProgress } from "./watch-history.js";
 import { escapeHtml } from "./utils.js";
 import { apiError, isVerifyError } from "./sources.js";
+import { createNativeVideo, nativePlayerAvailable } from "./native/native-player.js";
 
 const streamCache = new Map();
 const MAX_LINES_PER_SOURCE = 2;
@@ -32,6 +33,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   }
 
   let episodes = episodeSourceMap;
+  // The <video> element, or on Android the libmpv player behind the same interface.
+  let media = video;
   const resume = context.resume || null;
   const itemId = context.itemId || null;
 
@@ -156,8 +159,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     const playlist = currentPlaylist();
     if (!episode || !source) return;
 
-    const position = Number(video.currentTime || 0);
-    const duration = Number(video.duration || 0);
+    const position = Number(media.currentTime || 0);
+    const duration = Number(media.duration || 0);
     if (!force && duration > 0 && position < 3) return;
     const episodeNumber = resolvePlayEpisodeNumber(episode, source);
     if (!force && duration > 0 && position / duration > 0.98) {
@@ -193,21 +196,25 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     stopProgressTracking();
     state.progressTimer = setInterval(() => saveProgress(false), 5000);
 
+    const player = media;
     const onPause = () => saveProgress(true);
-    const onEnded = () => saveProgress(true);
+    const onEnded = () => {
+      saveProgress(true);
+      if (player.isNative) playNextEpisode();
+    };
     const onHide = () => {
       if (document.visibilityState === "hidden") saveProgress(true);
     };
     const onPageHide = () => saveProgress(true);
 
-    video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
+    player.addEventListener("pause", onPause);
+    player.addEventListener("ended", onEnded);
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", onPageHide);
 
     state.progressCleanups = [
-      () => video.removeEventListener("pause", onPause),
-      () => video.removeEventListener("ended", onEnded),
+      () => player.removeEventListener("pause", onPause),
+      () => player.removeEventListener("ended", onEnded),
       () => document.removeEventListener("visibilitychange", onHide),
       () => window.removeEventListener("pagehide", onPageHide),
     ];
@@ -234,6 +241,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     stopProgressTracking();
     saveProgress(true);
     destroyHls();
+    if (media.isNative) media.stop();
     if (video.isConnected) {
       try {
         video.pause();
@@ -275,7 +283,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     playStartButton.hidden = true;
     playerFrame.classList.remove("is-idle", "is-loading", "is-embed");
     clearEmbed();
-    video.hidden = false;
+    video.hidden = Boolean(media.isNative);
     startProgressTracking();
     setStatus("");
   }
@@ -355,6 +363,44 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     }));
   }
 
+  async function prepareMedia() {
+    if (media.isNative || !(await nativePlayerAvailable())) return;
+    if (media.isNative) return;
+    media = createNativeVideo(playerFrame, {
+      onNext: playNextEpisode,
+      onBack: () => document.querySelector("#playerBackButton")?.click(),
+    });
+  }
+
+  function nativeInfo() {
+    const playlist = currentPlaylist();
+    const episode = currentEpisode();
+    return {
+      title: [playlist?.matchName, episode?.label].filter(Boolean).join(" · "),
+      hasNext: state.episodeIndex < episodes.length - 1,
+    };
+  }
+
+  async function attachMedia(stream) {
+    if (!media.isNative) {
+      await attachStream(video, stream, state);
+      return;
+    }
+    await media.attach(stream, state.resumePosition, nativeInfo());
+    if (media.duration > 0 && media.duration < MIN_EPISODE_SECONDS) {
+      throw new Error("片源返回的是占位短片，请换片源");
+    }
+    state.resumePosition = 0;
+  }
+
+  function playNextEpisode() {
+    const nextIndex = state.episodeIndex + 1;
+    if (nextIndex >= episodes.length) return;
+    const lineIndex = currentSourceRef()?.lineIndex;
+    const sameLine = (episodes[nextIndex]?.sources || []).findIndex((source) => source.lineIndex === lineIndex);
+    selectEpisode(nextIndex, Math.max(0, sameLine));
+  }
+
   async function seekToResume() {
     const target = state.resumePosition;
     state.resumePosition = 0;
@@ -376,6 +422,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     destroyHls();
     showLoading();
     playerFrame.classList.remove("is-failed", "needs-verify");
+    await prepareMedia();
+    if (requestId !== state.requestId) return;
 
     const candidates = context.singleSource
       ? buildPlayCandidates(true)
@@ -406,12 +454,12 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
       try {
         const stream = await getStream(candidate.playApi);
         if (requestId !== state.requestId) return;
-        await attachStream(video, stream, state);
+        await attachMedia(stream);
         if (requestId !== state.requestId) return;
         document.dispatchEvent(new CustomEvent("anime:source-playback", { detail: { source: candidate.sourceId, ok: true, label: candidate.label } }));
         showPlaying();
         await seekToResume();
-        await video.play().catch(() => {});
+        await media.play().catch(() => {});
         saveProgress(true);
         prefetchNearbyEpisodes();
         return;
@@ -433,10 +481,10 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
       try {
         const stream = await getStream(candidate.playApi);
         if (requestId !== state.requestId) return;
-        await attachStream(video, stream, state);
+        await attachMedia(stream);
         if (requestId !== state.requestId) return;
         showPlaying();
-        await video.play().catch(() => {});
+        await media.play().catch(() => {});
         return;
       } catch (error) {
         lastError = error;
