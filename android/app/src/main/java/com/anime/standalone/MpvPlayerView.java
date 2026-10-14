@@ -50,7 +50,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         void onBackRequested();
     }
 
-    private static final int ACCENT = Color.parseColor("#5B8CFF");
+    private int accent = Color.parseColor("#8AB8F8");
     private static final long HIDE_DELAY_MS = 3500;
     private static final long PROGRESS_POST_MS = 250;
     private static final float[] SPEEDS = {0.75f, 1f, 1.25f, 1.5f, 2f};
@@ -181,8 +181,8 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
         seekBar = new SeekBar(activity);
         seekBar.setMax(SEEK_MAX);
-        seekBar.setProgressTintList(ColorStateList.valueOf(ACCENT));
-        seekBar.setThumbTintList(ColorStateList.valueOf(ACCENT));
+        seekBar.setProgressTintList(ColorStateList.valueOf(accent));
+        seekBar.setThumbTintList(ColorStateList.valueOf(accent));
         seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(0x66FFFFFF));
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -406,6 +406,13 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         showControls();
     }
 
+    public void setTheme(boolean dark) {
+        accent = Color.parseColor(dark ? "#EFAFCB" : "#8AB8F8");
+        seekBar.setProgressTintList(ColorStateList.valueOf(accent));
+        seekBar.setThumbTintList(ColorStateList.valueOf(accent));
+        closeEpisodes();
+    }
+
     public void setEpisodes(JSONArray episodes, int selected) {
         episodeLabels = new String[episodes == null ? 0 : episodes.length()];
         for (int i = 0; i < episodeLabels.length; i++) {
@@ -440,7 +447,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         LinearLayout panel = new LinearLayout(getContext());
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(12), dp(12), dp(12), dp(12));
-        panel.setBackgroundColor(0xF51B211E);
+        panel.setBackgroundColor(0xF51E1C22);
         panel.setClickable(true);
         TextView heading = label(16);
         heading.setText("选集 · 关闭");
@@ -453,8 +460,8 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
                 TextView row = (TextView) super.getView(position, convertView, parent);
-                row.setTextColor(position == episodeIndex ? Color.parseColor("#B6E6C7") : Color.WHITE);
-                row.setBackground(pill(position == episodeIndex ? 0xFF354C3E : 0x00000000, dp(10)));
+                row.setTextColor(position == episodeIndex ? accent : Color.WHITE);
+                row.setBackground(pill(position == episodeIndex ? ((accent & 0x00FFFFFF) | 0x33000000) : 0x00000000, dp(10)));
                 row.setTextSize(14);
                 row.setMinHeight(dp(48));
                 row.setSelected(position == episodeIndex);

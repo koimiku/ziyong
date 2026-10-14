@@ -1,21 +1,21 @@
 /* Kazumi / Material 3 look: tonal surfaces instead of outlines, posters captioned
    underneath, labelled navigation with pill indicators, chips and underline tabs. */
 :root {
-  --accent: #426b3b;
-  --accent-2: #34572f;
-  --ink: #20251e;
-  --muted: #626b5e;
-  --surface: #fcfdf7;
-  --surface-2: #edf1e6;
-  --line: #dce3d5;
-  --accent-soft: #e0ecd8;
-  --tab-active-bg: #d7e8cd;
-  --input-bg: #f1f4eb;
-  --m3-surface: color-mix(in srgb, var(--accent) 3%, #f8faf2);
-  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #f8faf2);
-  --m3-container: color-mix(in srgb, var(--accent) 8%, #f8faf2);
-  --m3-container-high: color-mix(in srgb, var(--accent) 11%, #f8faf2);
-  --m3-secondary-container: color-mix(in srgb, var(--accent) 20%, #f8faf2);
+  --accent: #3866a6;
+  --accent-2: #244d85;
+  --ink: #1b2535;
+  --muted: #5e6a7d;
+  --surface: #fafcff;
+  --surface-2: #e8eff9;
+  --line: #d6e1f0;
+  --accent-soft: #dce9fc;
+  --tab-active-bg: #d2e3fc;
+  --input-bg: #edf3fc;
+  --m3-surface: color-mix(in srgb, var(--accent) 3%, #f7faff);
+  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #f7faff);
+  --m3-container: color-mix(in srgb, var(--accent) 8%, #f7faff);
+  --m3-container-high: color-mix(in srgb, var(--accent) 11%, #f7faff);
+  --m3-secondary-container: color-mix(in srgb, var(--accent) 20%, #f7faff);
   --m3-on-secondary-container: color-mix(in srgb, var(--accent) 72%, #000);
   --m3-outline: color-mix(in srgb, var(--ink) 18%, transparent);
   --m3-poster-shadow: 0 1px 3px rgba(20, 20, 40, .14);
@@ -25,21 +25,21 @@
   --panel-bg: var(--m3-surface);
 }
 [data-theme="dark"] {
-  --accent: #add39e;
-  --accent-2: #c3e6b5;
-  --ink: #e3e7dc;
-  --muted: #a7b09f;
-  --surface: #171c16;
-  --surface-2: #22291f;
-  --line: #343e30;
-  --accent-soft: #2c3c27;
-  --tab-active-bg: #354b2f;
-  --input-bg: #22291f;
-  --m3-surface: color-mix(in srgb, var(--accent) 4%, #111318);
-  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #17191f);
-  --m3-container: color-mix(in srgb, var(--accent) 7%, #1c1e24);
-  --m3-container-high: color-mix(in srgb, var(--accent) 9%, #24262d);
-  --m3-secondary-container: color-mix(in srgb, var(--accent) 26%, #1c1e24);
+  --accent: #efafcb;
+  --accent-2: #f7c7dd;
+  --ink: #f0e1e9;
+  --muted: #bda5b2;
+  --surface: #1d171d;
+  --surface-2: #2b222a;
+  --line: #483640;
+  --accent-soft: #462c3b;
+  --tab-active-bg: #583748;
+  --input-bg: #2b222a;
+  --m3-surface: color-mix(in srgb, var(--accent) 4%, #171217);
+  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #211a20);
+  --m3-container: color-mix(in srgb, var(--accent) 7%, #291f27);
+  --m3-container-high: color-mix(in srgb, var(--accent) 9%, #342831);
+  --m3-secondary-container: color-mix(in srgb, var(--accent) 26%, #291f27);
   --m3-on-secondary-container: color-mix(in srgb, var(--accent) 35%, #fff);
   --m3-outline: color-mix(in srgb, var(--ink) 22%, transparent);
   --m3-poster-shadow: 0 1px 3px rgba(0, 0, 0, .4);
@@ -528,7 +528,7 @@ body { background: var(--bg); }
 .kz-text-button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .kz-text-button svg { width: 18px; height: 18px; fill: currentColor; }
 .kz-filled-button { min-width: 88px; padding: 0 24px; background: var(--accent); color: #fff; }
-[data-theme="dark"] .kz-filled-button { color: #1b1a3d; }
+[data-theme="dark"] .kz-filled-button { color: #35202c; }
 .kz-filled-button:hover:not(:disabled) { filter: brightness(1.08); }
 .kz-text-button:disabled,
 .kz-filled-button:disabled { cursor: default; opacity: .38; }

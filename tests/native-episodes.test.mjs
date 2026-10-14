@@ -15,6 +15,7 @@ test("native episode selection routes valid indexes and keeps fullscreen on load
     .replace(/^import .*;\r?\n/, "").replaceAll("export function ", "function ");
   const context = {
     window: { Capacitor: { Plugins: { NativePlayer: api } }, devicePixelRatio: 1, location: { href: "https://localhost/" } },
+    document: { documentElement: { dataset: { theme: "dark" } } },
     navigator: { userAgent: "test" }, EventTarget, Event, URL,
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
   };

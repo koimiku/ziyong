@@ -35,7 +35,6 @@ export function nativePlayerAvailable() {
 
 export function exitNativeFullscreen() {
   if (!fullscreen) return false;
-  fullscreen = false;
   plugin()?.setFullscreen({ value: false }).catch(() => {});
   return true;
 }
@@ -203,6 +202,7 @@ export function createNativeVideo(frame, hooks = {}) {
         position,
         title: info.title || "",
         hasNext: Boolean(info.hasNext),
+        dark: document.documentElement.dataset.theme === "dark",
         episodes: info.episodes || [],
         episodeIndex: info.episodeIndex || 0,
         rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
@@ -211,7 +211,7 @@ export function createNativeVideo(frame, hooks = {}) {
       emit("loadedmetadata");
     },
     setInfo(info = {}) {
-      api.setInfo({ ...info, title: info.title || "", hasNext: Boolean(info.hasNext) }).catch(() => {});
+      api.setInfo({ ...info, dark: document.documentElement.dataset.theme === "dark", title: info.title || "", hasNext: Boolean(info.hasNext) }).catch(() => {});
     },
     stop,
   };

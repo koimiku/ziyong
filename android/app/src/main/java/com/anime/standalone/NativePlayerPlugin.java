@@ -1,8 +1,5 @@
 package com.anime.standalone;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
@@ -16,7 +13,6 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.animation.PathInterpolator;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import androidx.core.view.WindowCompat;
@@ -34,8 +30,6 @@ import java.util.Iterator;
 @CapacitorPlugin(name = "NativePlayer")
 public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener {
     private static final long LOAD_TIMEOUT_MS = 25000;
-    private static final long ANIM_MS = 260;
-    private static final long ROTATE_WAIT_MS = 900;
     private static final long PROGRESS_EVENT_MS = 1000;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -48,8 +42,8 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     private boolean active;
     private boolean visible = true;
     private boolean fullscreen;
-    private ValueAnimator animator;
     private Runnable cancelFullscreenLayout;
+    private Runnable cancelExitLayout;
     private int savedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
     private long lastProgressAt;
     private boolean lastPaused = true;
@@ -86,8 +80,9 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
             main.removeCallbacks(loadTimeout);
             main.postDelayed(loadTimeout, LOAD_TIMEOUT_MS);
 
-            if (rect != null) readRect(rect, inlineRect);
+            if (rect != null && !fullscreen) readRect(rect, inlineRect);
             if (!fullscreen) applyBounds(inlineRect);
+            player.setTheme(Boolean.TRUE.equals(call.getBoolean("dark", false)));
             player.setTitle(title);
             player.setHasNext(hasNext);
             player.setEpisodes(call.getArray("episodes"), call.getInt("episodeIndex", 0));
@@ -124,8 +119,8 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         Rect next = new Rect();
         readRect(call.getData(), next);
         main.post(() -> {
-            inlineRect.set(next);
-            if (player != null && !fullscreen && animator == null) applyBounds(inlineRect);
+            if (!fullscreen) inlineRect.set(next);
+            if (player != null && !fullscreen) applyBounds(inlineRect);
             call.resolve();
         });
     }
@@ -171,6 +166,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         Boolean hasNext = call.getBoolean("hasNext", null);
         main.post(() -> {
             if (player != null) {
+                if (call.getBoolean("dark") != null) player.setTheme(Boolean.TRUE.equals(call.getBoolean("dark")));
                 if (title != null) player.setTitle(title);
                 if (hasNext != null) player.setHasNext(hasNext);
                 if (call.getArray("episodes") != null) player.setEpisodes(call.getArray("episodes"), call.getInt("episodeIndex", 0));
@@ -208,6 +204,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     @Override
     protected void handleOnDestroy() {
         if (cancelFullscreenLayout != null) cancelFullscreenLayout.run();
+        if (cancelExitLayout != null) cancelExitLayout.run();
         main.removeCallbacksAndMessages(null);
         if (player != null) {
             player.release();
@@ -339,7 +336,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         Activity activity = getActivity();
         Window window = activity.getWindow();
         FrameLayout root = content();
-        if (animator != null) animator.cancel();
+
         fullscreen = true;
         savedOrientation = activity.getRequestedOrientation();
         notifyFullscreen(true);
@@ -378,111 +375,57 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         root.requestLayout();
     }
-    private void exitFullscreen(boolean animate) {
+    private void exitFullscreen(boolean waitForRotation) {
         if (!fullscreen) return;
+        if (cancelExitLayout != null) {
+            if (waitForRotation) return;
+            cancelExitLayout.run();
+        }
         if (cancelFullscreenLayout != null) cancelFullscreenLayout.run();
-        fullscreen = false;
         Activity activity = getActivity();
         Window window = activity.getWindow();
-        if (player != null) {
-            player.setFullscreen(false);
-            player.resetBrightness();
+        FrameLayout root = content();
+        if (player != null) player.resetBrightness();
+
+        Runnable finish = () -> {
+            if (cancelExitLayout != null) cancelExitLayout.run();
+            fullscreen = false;
+            if (player != null) {
+                player.setFullscreen(false);
+                applyBounds(inlineRect);
+                updateVisibility();
+            }
+            notifyFullscreen(false);
+        };
+        // Keep fullscreen geometry and suspend WebView bounds updates throughout
+        // rotation. Restore the inline rectangle before the first portrait frame.
+        if (waitForRotation && active && player != null) {
+            ViewTreeObserver.OnPreDrawListener[] listener = new ViewTreeObserver.OnPreDrawListener[1];
+            Runnable timeout = finish;
+            cancelExitLayout = () -> {
+                if (root.getViewTreeObserver().isAlive()) {
+                    root.getViewTreeObserver().removeOnPreDrawListener(listener[0]);
+                }
+                main.removeCallbacks(timeout);
+                cancelExitLayout = null;
+            };
+            listener[0] = () -> {
+                if (root.getHeight() < root.getWidth()) return true;
+                finish.run();
+                return false;
+            };
+            root.getViewTreeObserver().addOnPreDrawListener(listener[0]);
+            main.postDelayed(timeout, 2000);
         }
-        notifyFullscreen(false);
 
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         WindowCompat.setDecorFitsSystemWindows(window, true);
         setCutoutMode(window, false);
         WindowCompat.getInsetsController(window, window.getDecorView()).show(WindowInsetsCompat.Type.systemBars());
         activity.setRequestedOrientation(savedOrientation);
-
-        if (animator != null) animator.cancel();
-        if (player == null) return;
-        if (!animate || !active) {
-            applyBounds(inlineRect);
-            updateVisibility();
-            return;
-        }
-        FrameLayout content = content();
-        fillContent();
-        waitForPortrait(content, SystemClock.uptimeMillis() + ROTATE_WAIT_MS, () -> {
-            if (fullscreen || player == null) return;
-            Rect from = new Rect(0, 0, content.getWidth(), content.getHeight());
-            animateBounds(from, inlineRect, () -> {
-                if (fullscreen) return;
-                applyBounds(inlineRect);
-                updateVisibility();
-            });
-        });
+        if (!waitForRotation || !active || player == null) finish.run();
+        else root.requestLayout();
     }
-
-    // Rotation and the system bars returning each trigger a relayout; wait until the
-    // window is portrait again (or give up) and then a beat more for the page to settle.
-    private void waitForPortrait(View content, long deadline, Runnable done) {
-        boolean portrait = content.getHeight() >= content.getWidth();
-        if (portrait || SystemClock.uptimeMillis() >= deadline) {
-            main.postDelayed(done, 120);
-            return;
-        }
-        afterLayout(content, Math.max(16, deadline - SystemClock.uptimeMillis()), () -> waitForPortrait(content, deadline, done));
-    }
-
-    private void afterLayout(View view, long timeoutMs, Runnable action) {
-        final boolean[] ran = {false};
-        ViewTreeObserver.OnGlobalLayoutListener[] holder = new ViewTreeObserver.OnGlobalLayoutListener[1];
-        Runnable once = () -> {
-            if (ran[0]) return;
-            ran[0] = true;
-            view.getViewTreeObserver().removeOnGlobalLayoutListener(holder[0]);
-            action.run();
-        };
-        holder[0] = () -> main.post(once);
-        view.getViewTreeObserver().addOnGlobalLayoutListener(holder[0]);
-        main.postDelayed(once, timeoutMs);
-    }
-
-    private void animateBounds(Rect from, Rect to, Runnable done) {
-        if (animator != null) animator.cancel();
-        Rect start = new Rect(from);
-        Rect end = new Rect(to);
-        Rect frame = new Rect();
-        ValueAnimator next = ValueAnimator.ofFloat(0f, 1f);
-        next.setDuration(ANIM_MS);
-        next.setInterpolator(new PathInterpolator(0.2f, 0f, 0f, 1f));
-        next.addUpdateListener((animation) -> {
-            float t = (float) animation.getAnimatedValue();
-            frame.set(
-                lerp(start.left, end.left, t),
-                lerp(start.top, end.top, t),
-                lerp(start.right, end.right, t),
-                lerp(start.bottom, end.bottom, t)
-            );
-            applyBounds(frame);
-        });
-        next.addListener(new AnimatorListenerAdapter() {
-            private boolean cancelled;
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-                cancelled = true;
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                if (animator == animation) animator = null;
-                if (!cancelled && done != null) done.run();
-            }
-        });
-        animator = next;
-        next.start();
-    }
-
-    private Rect currentBounds() {
-        int left = Math.round(player.getTranslationX());
-        int top = Math.round(player.getTranslationY());
-        return new Rect(left, top, left + player.getWidth(), top + player.getHeight());
-    }
-
     private void applyBounds(Rect rect) {
         if (player == null) return;
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) player.getLayoutParams();
@@ -529,11 +472,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         return "";
     }
 
-    private static int lerp(int from, int to, float t) {
-        return Math.round(from + (to - from) * t);
-    }
-
-    private static void setCutoutMode(Window window, boolean edgeToEdge) {
+private static void setCutoutMode(Window window, boolean edgeToEdge) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
         WindowManager.LayoutParams params = window.getAttributes();
         params.layoutInDisplayCutoutMode = edgeToEdge
