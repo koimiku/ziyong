@@ -46,6 +46,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         void onEnded();
         void onNextRequested();
         void onEpisodeRequested(int index);
+        void onLockChanged(boolean locked);
         void onFullscreenRequested(boolean value);
         void onBackRequested();
     }
@@ -76,6 +77,10 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     private final TextView durationView;
     private final TextView speedView;
     private final TextView episodesButton;
+    private final TextView lockButton;
+    private final TextView unlockButton;
+    private final TextView skipButton;
+    private boolean controlsLocked;
     private FrameLayout episodeOverlay;
     private String[] episodeLabels = new String[0];
     private int episodeIndex;
@@ -156,6 +161,23 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         titleParams.leftMargin = dp(4);
         topBar.addView(titleView, titleParams);
+        lockButton = label(14);
+        lockButton.setText("锁定");
+        lockButton.setGravity(Gravity.CENTER);
+        lockButton.setContentDescription("锁定播放器");
+        lockButton.setOnClickListener(v -> setControlsLocked(true));
+        topBar.addView(lockButton, new LinearLayout.LayoutParams(dp(64), dp(44)));
+        unlockButton = label(14);
+        unlockButton.setText("解锁");
+        unlockButton.setGravity(Gravity.CENTER);
+        unlockButton.setBackground(pill(0xAA000000, dp(20)));
+        unlockButton.setContentDescription("解锁播放器");
+        unlockButton.setVisibility(View.GONE);
+        unlockButton.setOnClickListener(v -> setControlsLocked(false));
+        LayoutParams unlockParams = new LayoutParams(dp(76), dp(48), Gravity.TOP | Gravity.END);
+        unlockParams.setMargins(dp(12), dp(12), dp(28), 0);
+        addView(unlockButton, unlockParams);
+
         addView(topBar, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
         bottomBar = new LinearLayout(activity);
@@ -222,6 +244,18 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         episodesButton.setContentDescription("选择集数");
         episodesButton.setOnClickListener(v -> showEpisodes());
         bottomBar.addView(episodesButton, new LinearLayout.LayoutParams(dp(56), dp(44)));
+
+        skipButton = label(13);
+        skipButton.setText("+85 秒");
+        skipButton.setGravity(Gravity.CENTER);
+        skipButton.setContentDescription("快进85秒");
+        skipButton.setOnClickListener(v -> {
+            if (loading || duration <= 0) return;
+            seekTo(position + 85);
+            showHint("快进 85 秒", 900);
+            scheduleHide();
+        });
+        bottomBar.addView(skipButton, new LinearLayout.LayoutParams(dp(64), dp(44)));
 
         fullscreenButton = iconButton(R.drawable.mpv_ic_fullscreen, "全屏");
         fullscreenButton.setOnClickListener((v) -> listener.onFullscreenRequested(!fullscreen));
@@ -401,13 +435,16 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     public void setFullscreen(boolean value) {
         fullscreen = value;
-        if (!value) closeEpisodes();
+        if (!value) {
+            setControlsLocked(false);
+            closeEpisodes();
+        }
         applyChrome();
         showControls();
     }
 
-    public void setTheme(boolean dark) {
-        accent = Color.parseColor(dark ? "#EFAFCB" : "#8AB8F8");
+    public void setTheme(boolean dark, String color) {
+        accent = Color.parseColor(color != null && color.matches("#[0-9a-fA-F]{6}") ? color : dark ? "#EFAFCB" : "#8AB8F8");
         seekBar.setProgressTintList(ColorStateList.valueOf(accent));
         seekBar.setThumbTintList(ColorStateList.valueOf(accent));
         closeEpisodes();
@@ -478,6 +515,28 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         addView(episodeOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         list.setSelection(Math.max(0, episodeIndex));
     }
+    public boolean isControlsLocked() { return controlsLocked; }
+
+    private void setControlsLocked(boolean locked) {
+        controlsLocked = locked && fullscreen;
+        restoreSpeed();
+        gestureMode = GESTURE_NONE;
+        userSeeking = false;
+        closeEpisodes();
+        main.removeCallbacks(hideControlsTask);
+        topBar.animate().cancel();
+        bottomBar.animate().cancel();
+        unlockButton.setVisibility(controlsLocked ? View.VISIBLE : View.GONE);
+        unlockButton.bringToFront();
+        if (controlsLocked) {
+            topBar.setVisibility(View.GONE);
+            bottomBar.setVisibility(View.GONE);
+            hintView.setVisibility(View.GONE);
+            controlsVisible = false;
+        } else showControls();
+        listener.onLockChanged(controlsLocked);
+    }
+
     public void resetBrightness() {
         if (!(getContext() instanceof Activity)) return;
         android.view.Window window = ((Activity) getContext()).getWindow();
@@ -633,6 +692,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (controlsLocked) return true;
         gestures.onTouchEvent(event);
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) finishGesture();
@@ -758,6 +818,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void showControls() {
+        if (controlsLocked) return;
         controlsVisible = true;
         fade(topBar, true);
         fade(bottomBar, true);
@@ -808,6 +869,8 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void applyChrome() {
+        lockButton.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
+        skipButton.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
         nextButton.setVisibility(hasNext ? View.VISIBLE : View.GONE);
         titleView.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
         episodesButton.setVisibility(fullscreen && episodeLabels.length > 0 ? View.VISIBLE : View.GONE);

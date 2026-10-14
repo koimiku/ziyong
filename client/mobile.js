@@ -39,11 +39,13 @@ function applyMobileMode() {
   document.body.classList.toggle("is-mobile", mobile);
   if (!mobile) {
     appShell.classList.remove("mobile-panel-open");
-    document.body.classList.remove("mobile-drawer-open", "mobile-sources-mode", "mobile-settings-mode");
+    document.body.classList.remove("mobile-drawer-open", "mobile-sources-mode", "mobile-settings-mode", "mobile-collection-mode");
     return;
   }
   setAppView(
-    document.body.classList.contains("mobile-settings-mode")
+    document.body.classList.contains("mobile-collection-mode")
+      ? "collection"
+      : document.body.classList.contains("mobile-settings-mode")
       ? "settings"
       : document.body.classList.contains("mobile-sources-mode")
         ? "miru"
@@ -81,6 +83,11 @@ function setupBottomNav() {
       return;
     }
 
+    if (tab === "collection") {
+      setAppView("collection");
+      scrollMainStage(0);
+      return;
+    }
     if (tab === "settings") {
       setAppView("settings");
       scrollMainStage(0);

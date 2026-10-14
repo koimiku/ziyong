@@ -1,0 +1,48 @@
+/* Each mode keeps an independent colour preference. */
+:root[data-palette="blue"] { --palette-color: #3866a6; }
+:root[data-palette="pink"] { --palette-color: #a64272; }
+:root[data-palette="purple"] { --palette-color: #7553a5; }
+:root[data-palette="green"] { --palette-color: #426b3b; }
+:root[data-palette="orange"] { --palette-color: #965422; }
+:root[data-palette="teal"] { --palette-color: #246e70; }
+:root[data-theme="dark"][data-palette="blue"] { --palette-color: #a5c8ff; }
+:root[data-theme="dark"][data-palette="pink"] { --palette-color: #efafcb; }
+:root[data-theme="dark"][data-palette="purple"] { --palette-color: #d0b4f4; }
+:root[data-theme="dark"][data-palette="green"] { --palette-color: #add39e; }
+:root[data-theme="dark"][data-palette="orange"] { --palette-color: #f0bc8c; }
+:root[data-theme="dark"][data-palette="teal"] { --palette-color: #91d4d2; }
+:root[data-palette] {
+  --accent: var(--palette-color);
+  --accent-2: color-mix(in srgb, var(--accent) 80%, #000);
+  --ink: color-mix(in srgb, var(--accent) 16%, #18202a);
+  --muted: color-mix(in srgb, var(--accent) 22%, #626a74);
+  --surface: color-mix(in srgb, var(--accent) 2%, #fff);
+  --surface-2: color-mix(in srgb, var(--accent) 8%, #f7faff);
+  --line: color-mix(in srgb, var(--accent) 18%, #edf0f5);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, #fff);
+  --tab-active-bg: color-mix(in srgb, var(--accent) 18%, #fff);
+  --input-bg: var(--surface-2);
+  --m3-surface: color-mix(in srgb, var(--accent) 3%, #f7faff);
+  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #f7faff);
+  --m3-container: color-mix(in srgb, var(--accent) 8%, #f7faff);
+  --m3-container-high: color-mix(in srgb, var(--accent) 11%, #f7faff);
+  --m3-secondary-container: color-mix(in srgb, var(--accent) 20%, #f7faff);
+}
+:root[data-theme="dark"][data-palette] {
+  --accent-2: color-mix(in srgb, var(--accent) 80%, #fff);
+  --ink: color-mix(in srgb, var(--accent) 12%, #f0eef2);
+  --muted: color-mix(in srgb, var(--accent) 20%, #b0aab2);
+  --surface: color-mix(in srgb, var(--accent) 4%, #171419);
+  --surface-2: color-mix(in srgb, var(--accent) 7%, #242026);
+  --line: color-mix(in srgb, var(--accent) 18%, #302b33);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, #211b24);
+  --tab-active-bg: color-mix(in srgb, var(--accent) 24%, #211b24);
+  --input-bg: var(--surface-2);
+  --m3-surface: color-mix(in srgb, var(--accent) 4%, #171419);
+  --m3-container-low: color-mix(in srgb, var(--accent) 5%, #211a20);
+  --m3-container: color-mix(in srgb, var(--accent) 7%, #291f27);
+  --m3-container-high: color-mix(in srgb, var(--accent) 9%, #342831);
+  --m3-secondary-container: color-mix(in srgb, var(--accent) 26%, #291f27);
+}
+.palette-settings { display: grid; gap: 10px; margin-top: 18px; }
+.palette-settings label { font-size: 13px; color: var(--muted); }

@@ -12,13 +12,17 @@
       try {
         const mode = localStorage.getItem("anime-theme") || localStorage.getItem("fanxun-theme") || "light";
         document.documentElement.dataset.theme = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+        const colors = ["blue", "pink", "purple", "green", "orange", "teal"];
+        const resolved = document.documentElement.dataset.theme;
+        const saved = localStorage.getItem("anime-palette-" + resolved);
+        document.documentElement.dataset.palette = colors.includes(saved) ? saved : resolved === "dark" ? "pink" : "blue";
       } catch {}
     </script>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <link rel="stylesheet" href="./styles.css" /><link rel="stylesheet" href="./client/ui-polish.css" /><link rel="stylesheet" href="./client/motion.css" /><link rel="stylesheet" href="./client/kazumi-ui.css" />
-  <link rel="stylesheet" href="./client/startup.css" /></head>
+  <link rel="stylesheet" href="./client/palette.css" /><link rel="stylesheet" href="./client/startup.css" /></head>
   <body><script src="./client/startup.js"></script>
     <header class="desktop-titlebar" id="desktopTitlebar" hidden aria-label="窗口标题栏">
       <div class="desktop-titlebar-drag">
@@ -120,6 +124,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M8 5v14M16 5v14M3.5 9.5H8M3.5 14.5H8M16 9.5h4.5M16 14.5h4.5"/></svg>
         <span>片源</span>
       </button>
+      <button type="button" data-mobile-tab="collection" aria-label="收藏"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4z"/></svg><span>收藏</span></button>
       <button type="button" data-mobile-tab="settings" aria-label="设置">
         <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
         <span>设置</span>
@@ -143,6 +148,7 @@
         <button class="rail-button" type="button" data-nav-view="miru" aria-label="片源">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M8 5v14M16 5v14M3.5 9.5H8M3.5 14.5H8M16 9.5h4.5M16 14.5h4.5"/></svg>
         </button>
+        <button class="rail-button" type="button" data-nav-view="collection" aria-label="收藏"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4z"/></svg></button>
         <div class="icon-rail-bottom">
           <button class="rail-button" type="button" id="lanShareOpen" aria-label="手机观看">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
@@ -262,7 +268,16 @@
           <section class="results-grid results-grid--browse" id="resultsGrid"></section>
         </section>
 
-        <section class="settings-view" id="settingsView" hidden aria-label="设置">
+        <section class="collection-view" id="collectionView" hidden aria-label="收藏与追番">
+          <div class="media-row-head"><h2>收藏与追番</h2><span id="collectionCount"></span></div>
+          <div class="collection-tabs" id="collectionTabs" aria-label="收藏状态">
+            <button type="button" data-collection-filter="all">全部</button>
+            <button type="button" data-collection-filter="planned">想看</button>
+            <button type="button" data-collection-filter="watching">在看</button>
+            <button type="button" data-collection-filter="completed">看完</button>
+          </div>
+          <div class="results-grid" id="collectionGrid"></div>
+        </section>        <section class="settings-view" id="settingsView" hidden aria-label="设置">
                     <div class="settings-card" id="startupCard">
             <h2>开屏</h2>
             <label class="startup-toggle">显示开屏动画<input id="startupEnabled" type="checkbox" /></label>
@@ -327,15 +342,11 @@
               <option value="dark">深色</option>
               <option value="system">跟随系统</option>
             </select>
-          </div>
+<div class="palette-settings"><label for="lightPaletteSelect">浅色配色</label><select id="lightPaletteSelect"><option value="blue">雾蓝</option><option value="pink">樱粉</option><option value="purple">藤紫</option><option value="green">松绿</option><option value="orange">暖橙</option><option value="teal">湖青</option></select><label for="darkPaletteSelect">深色配色</label><select id="darkPaletteSelect"><option value="blue">雾蓝</option><option value="pink">樱粉</option><option value="purple">藤紫</option><option value="green">松绿</option><option value="orange">暖橙</option><option value="teal">湖青</option></select></div>          </div>
           <div class="settings-card">
             <h3>手机观看</h3>
             <p class="lan-share-hint" id="lanShareHint">电脑版可生成二维码；手机浏览器直接访问同 WiFi 地址即可。</p>
             <p class="mobile-lan-hint" id="mobileLanHint"></p>
-          </div>
-          <div class="settings-card notice">
-            <h3>资源说明</h3>
-            <p>内置在线片源优先；首次启动会自动安装常用 Kazumi 规则作为额外视频源。</p>
           </div>
         </section>
 
@@ -344,7 +355,6 @@
             <div class="sources-page-intro">
               <p class="eyebrow">Anime</p>
               <h2>片源</h2>
-              <p class="sources-page-desc">内置在线源和 Kazumi 规则，播放番剧时自动匹配可用线路。</p>
             </div>
             <div class="sources-page-actions">
               <button class="small-button" id="installAllSourcesButton" type="button">一键安装全部</button>

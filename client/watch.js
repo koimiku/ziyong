@@ -1,3 +1,4 @@
+import { getCollectionStatus, setCollectionStatus } from "./collection-store.js";
 import { authorizedPlayers, allowedEmbedHosts } from "./config.js";
 import { isTokusatsuMode } from "./content-mode.js";
 import { isTokusatsuItem } from "./tokusatsu.js";
@@ -266,6 +267,17 @@ export async function showDetails(item, options = {}) {
   syncMobileWatchState();
 
   detailPanel.innerHTML = renderEntryShell(item, title, players, resume);
+  const collectionSelect = detailPanel.querySelector("#collectionStatus");
+  collectionSelect.value = getCollectionStatus(item.id);
+  collectionSelect.addEventListener("change", () => {
+    try {
+      setCollectionStatus(item, collectionSelect.value);
+      detailPanel.querySelector("#collectionStatusHint").textContent = collectionSelect.value ? "已保存" : "已移出收藏";
+    } catch {
+      collectionSelect.value = getCollectionStatus(item.id);
+      detailPanel.querySelector("#collectionStatusHint").textContent = "保存失败，请检查设备存储空间";
+    }
+  });
   playCardExpansion();
 
   document.querySelector("#watchBackButton")?.addEventListener("click", () => {
@@ -535,6 +547,7 @@ function renderEntryShell(item, title, players, resume) {
             <h1>${escapeHtml(title)}</h1>
             <p class="entry-aliases">${escapeHtml(item.aliases.join(" / "))}</p>
             ${resumeHint}
+            <div class="detail-collection"><label for="collectionStatus">收藏状态</label><select id="collectionStatus"><option value="">未收藏</option><option value="planned">想看</option><option value="watching">在看</option><option value="completed">看完</option></select><span id="collectionStatusHint" role="status"></span></div>
             <div class="detail-stats entry-stats">
               <div class="stat"><strong>${escapeHtml(item.displayType || (tokusatsu ? "特摄" : "动画"))}</strong><span>类型</span></div>
               <div class="stat"><strong>${escapeHtml(String(item.episodes || "未知"))}</strong><span>集数</span></div>
@@ -642,6 +655,7 @@ function renderWatchPanels(playlist, episodeSourceMap, resume) {
             <button class="player-switch-source" type="button" data-change-source>更换片源</button>
           </div>
         </div>
+        <button class="ghost-button player-skip85" id="playerSkip85" type="button">快进 85 秒</button>
         <div class="player-meta" id="sourcePlayerMeta">
           ${escapeHtml(playlist.matchName)} · ${escapeHtml(initialLine.name)} · ${escapeHtml(initialEpisode.label)}
         </div>

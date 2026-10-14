@@ -1,6 +1,6 @@
 import { appShell } from "./dom.js";
 
-const VIEWS = ["explore", "miru", "settings"];
+const VIEWS = ["explore", "miru", "collection", "settings"];
 const MOBILE_QUERY = "(max-width: 780px)";
 
 function isMobileLayout() {
@@ -17,7 +17,7 @@ function prefersReducedMotion() {
 
 function animateViewEnter(view) {
   const selector =
-    view === "miru" ? "#miruView" : view === "settings" ? "#settingsView" : "#dashboardView:not([hidden]), #resultsView:not([hidden])";
+    view === "collection" ? "#collectionView" : view === "miru" ? "#miruView" : view === "settings" ? "#settingsView" : "#dashboardView:not([hidden]), #resultsView:not([hidden])";
   const element = document.querySelector(selector);
   if (!element || element.hidden || typeof element.animate !== "function" || prefersReducedMotion()) return;
   enterAnimation = element.animate(
@@ -52,6 +52,7 @@ export function setAppView(view) {
     const active =
       (tab === "home" && view === "explore") ||
       (tab === "miru" && view === "miru") ||
+      (tab === "collection" && view === "collection") ||
       (tab === "settings" && view === "settings");
     button.classList.toggle("active", active);
   });
@@ -70,12 +71,15 @@ export function setAppView(view) {
   document.querySelector("#miruView")?.toggleAttribute("hidden", view !== "miru");
   document.querySelector("#settingsView")?.toggleAttribute("hidden", view !== "settings");
 
+  document.querySelector("#collectionView")?.toggleAttribute("hidden", view !== "collection");
+  appShell?.classList.toggle("view-collection", view === "collection");
   appShell?.classList.toggle("view-miru", view === "miru");
   appShell?.classList.toggle("view-settings", view === "settings");
   appShell?.classList.toggle("view-explore", view === "explore");
 
   if (isMobileLayout()) {
     document.body.classList.toggle("mobile-sources-mode", view === "miru");
+    document.body.classList.toggle("mobile-collection-mode", view === "collection");
     document.body.classList.toggle("mobile-settings-mode", view === "settings");
 
     const exploreChrome = view === "explore";
@@ -87,7 +91,7 @@ export function setAppView(view) {
 
 export function syncExplorePanels() {
   // Background feed/history updates must not reveal the home page over another view.
-  const outsideExplore = appShell?.classList.contains("view-miru") || appShell?.classList.contains("view-settings");
+  const outsideExplore = appShell?.classList.contains("view-collection") || appShell?.classList.contains("view-miru") || appShell?.classList.contains("view-settings");
   const searching = document.body.classList.contains("is-searching");
   const browsingHero = document.body.classList.contains("is-browsing-hero");
   const showList = searching || browsingHero;

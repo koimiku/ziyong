@@ -82,7 +82,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
 
             if (rect != null && !fullscreen) readRect(rect, inlineRect);
             if (!fullscreen) applyBounds(inlineRect);
-            player.setTheme(Boolean.TRUE.equals(call.getBoolean("dark", false)));
+            player.setTheme(Boolean.TRUE.equals(call.getBoolean("dark", false)), call.getString("accent"));
             player.setTitle(title);
             player.setHasNext(hasNext);
             player.setEpisodes(call.getArray("episodes"), call.getInt("episodeIndex", 0));
@@ -166,7 +166,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         Boolean hasNext = call.getBoolean("hasNext", null);
         main.post(() -> {
             if (player != null) {
-                if (call.getBoolean("dark") != null) player.setTheme(Boolean.TRUE.equals(call.getBoolean("dark")));
+                if (call.getBoolean("dark") != null) player.setTheme(Boolean.TRUE.equals(call.getBoolean("dark")), call.getString("accent"));
                 if (title != null) player.setTitle(title);
                 if (hasNext != null) player.setHasNext(hasNext);
                 if (call.getArray("episodes") != null) player.setEpisodes(call.getArray("episodes"), call.getInt("episodeIndex", 0));
@@ -181,7 +181,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         boolean value = Boolean.TRUE.equals(call.getBoolean("value", true));
         main.post(() -> {
             if (value) enterFullscreen();
-            else exitFullscreen(true);
+            else if (player == null || !player.isControlsLocked()) exitFullscreen(true);
             call.resolve();
         });
     }
@@ -253,6 +253,13 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     }
 
     @Override
+    public void onLockChanged(boolean locked) {
+        JSObject data = new JSObject();
+        data.put("locked", locked);
+        notifyListeners("lock", data);
+    }
+
+    @Override
     public void onEpisodeRequested(int index) {
         JSObject data = new JSObject();
         data.put("index", index);
@@ -262,7 +269,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     @Override
     public void onFullscreenRequested(boolean value) {
         if (value) enterFullscreen();
-        else exitFullscreen(true);
+        else if (player == null || !player.isControlsLocked()) exitFullscreen(true);
     }
 
     @Override

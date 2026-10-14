@@ -76,7 +76,8 @@ function handleAndroidBack(App) {
 
   if (
     document.body.classList.contains("mobile-sources-mode") ||
-    document.body.classList.contains("mobile-settings-mode")
+    document.body.classList.contains("mobile-settings-mode") ||
+    document.body.classList.contains("mobile-collection-mode")
   ) {
     setAppView("explore");
     return;

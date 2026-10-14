@@ -707,3 +707,28 @@ body:not(.is-searching):not(.is-browsing-hero) #statusLine:not(.is-error) { disp
 .anime-card.has-progress .card-footer { display: block; }
 .anime-card.has-progress .score { display: none; }
 .anime-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Grid cards must follow track width; horizontal rows retain their own widths. */
+.results-grid .anime-card, .recommend-grid .anime-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.results-grid .poster, .recommend-grid .poster { width: 100%; min-width: 0; }
+.results-grid .card-body, .recommend-grid .card-body { min-width: 0; }
+
+.collection-view { padding: 8px 0; }
+.collection-tabs { display: flex; gap: 8px; margin: 16px 0 20px; }
+.collection-tabs button { border: 0; border-radius: 24px; padding: 10px 18px; background: var(--m3-container); color: var(--ink); cursor: pointer; }
+.collection-tabs button.active { background: var(--m3-secondary-container); color: var(--m3-on-secondary-container); }
+.collection-card { text-align: left; padding: 0; color: var(--ink); font: inherit; }
+.collection-status { grid-area: label; font-size: 12px; color: var(--accent); }
+.detail-collection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+.detail-collection select { border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; }
+#collectionStatusHint { font-size: 12px; color: var(--muted); }
+.player-skip85 { margin: 8px 12px; }
+body.is-mobile #collectionGrid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px 8px; }
+@media (max-width:350px) { body.is-mobile #collectionGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+.view-collection .stage-header, .view-collection .filter-bar, .view-collection #statusLine, .view-collection .mobile-server-hint { display: none !important; }

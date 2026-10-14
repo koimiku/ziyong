@@ -1,3 +1,4 @@
+import { initializeCollection } from "./client/collection.js";
 import { fallbackAnime } from "./client/config.js";
 import { decorateAnime } from "./client/bangumi.js";
 import {
@@ -42,9 +43,6 @@ function showBootError(error) {
 
 try {
   installNativeApi();
-  if (isAndroidStandalone()) {
-    document.documentElement.classList.add("is-android-app");
-  }
 
   initializeWindowChrome();
   initializeContentMode();
@@ -93,10 +91,11 @@ try {
 
   enhanceNativeSelects();
   initializeTheme();
+  initializeCollection();
   initializeSearchDialog();
   initializeMediaRows();
   document.addEventListener("anime:watch-ended", () => {
-    if (!state.query) renderResults();
+    renderResults();
   });
   renderResults();
   initializeMobile();

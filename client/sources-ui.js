@@ -58,10 +58,10 @@ export async function initializeSourcesPanel() {
         (isTokusatsuMode()
           ? "特摄分区使用 Tokuzilla 片源。"
           : seeding
-            ? "正在安装默认 Kazumi 规则…"
+            ? "正在安装默认规则…"
             : repoError
               ? `规则仓库暂时连不上（${repoError}）。内置片源和已安装的 ${installedCount} 条规则仍可使用。`
-              : `内置 ${builtinCount} 个在线片源 · 已安装 ${installedCount} 条 Kazumi 规则`);
+              : `内置 ${builtinCount} 个在线片源 · 已安装 ${installedCount} 条规则`);
 
       applyHealthResults(listEl);
       runHealthChecks(listEl);
@@ -199,7 +199,7 @@ export async function initializeSourcesPanel() {
   document.addEventListener("anime:sources-seeding", (event) => {
     seeding = !event.detail?.done;
     if (seeding) {
-      if (!isTokusatsuMode()) statusEl.textContent = "正在安装默认 Kazumi 规则…";
+      if (!isTokusatsuMode()) statusEl.textContent = "正在安装默认规则…";
       return;
     }
     const installed = Number(event.detail?.result?.installed || 0);
@@ -207,7 +207,7 @@ export async function initializeSourcesPanel() {
       void render({
         preserveScroll: true,
         silent: true,
-        statusText: `已自动安装 ${installed} 条 Kazumi 规则。`,
+        statusText: `已自动安装 ${installed} 条规则。`,
       });
     } else {
       void render({ preserveScroll: true, silent: true });
@@ -237,6 +237,7 @@ export async function initializeSourcesPanel() {
   };
   setInterval(checkWhenActive, 600000);
   document.addEventListener("visibilitychange", checkWhenActive);
+  document.addEventListener("anime:watch-ended", checkWhenActive);
   window.addEventListener("online", checkWhenActive);
   if (view) {
     new MutationObserver(() => {
@@ -312,10 +313,9 @@ async function renderKazumiSection(container, { includeCatalog = true } = {}) {
 
   section.innerHTML = `
     <div class="miru-type-head">
-      <h4>Kazumi 规则</h4>
+      <h4>片源规则</h4>
       <span class="miru-type-meta">已安装 ${installedNames.size} · 共 ${items.length} 条${repoError ? " · 仓库暂不可用" : ""}</span>
     </div>
-    <p class="sources-panel-tip">规则来自 KazumiRules，搜索和选集按规则执行，能取出直链的线路会在本机播放。</p>
     <div class="sources-card-grid"></div>
   `;
   const grid = section.querySelector(".sources-card-grid");
@@ -473,6 +473,7 @@ function applyHealthResults(listEl) {
 }
 
 async function runHealthChecks(listEl, force = false) {
+  if (!force && (document.hidden || document.querySelector(".app-shell")?.classList.contains("is-watching"))) return;
   if (!force && document.querySelector("#sourceHealthAuto")?.checked === false) return;
   if (!navigator.onLine) {
     const summary = document.querySelector("#sourceHealthSummary");

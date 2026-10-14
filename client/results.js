@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "./work-queue.js";
 import { fallbackAnime } from "./config.js";
 import {
   decorateAnime,
@@ -12,7 +13,7 @@ import {
 import { refreshMediaRows } from "./media-rows.js";
 import { setSearchMode, syncExplorePanels } from "./app-nav.js";
 import { isTokusatsuMode } from "./content-mode.js";
-import { loadCalendarFeed, renderCalendarSection } from "./calendar.js";
+import { renderCalendarSection } from "./calendar.js";
 import {
   fetchTokuzillaLatestFeed,
   isTokusatsuItem,
@@ -37,14 +38,20 @@ import { getWatchHistoryForCurrentMode, getProgressPercent, formatProgressLabel,
 import { showDetails } from "./watch.js";
 
 const HERO_PREVIEW = 6;
+let searchRequestId = 0;
+let deferredRender = false;
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && deferredRender) renderResults();
+});
 
-function getHeroSource(items) {
-  const ranked = rankItems(items);
+function getHeroSource(items, ranked = rankItems(items)) {
   const heroPool = ranked.filter((item) => Number(item.score || 0) > 0);
   return heroPool.length ? heroPool : ranked;
 }
 
 export function openHeroBrowse() {
+  searchRequestId += 1;
+  resultsGrid.removeAttribute("aria-busy");
   state.browseMode = "hero";
   pageTitle.textContent = isTokusatsuMode() ? "最新更新" : "最高热度";
   updateSearchChrome();
@@ -55,6 +62,8 @@ export function openHeroBrowse() {
 let heroMoreBound = false;
 
 export function clearSearch() {
+  searchRequestId += 1;
+  resultsGrid.removeAttribute("aria-busy");
   state.query = "";
   state.browseMode = null;
   const input = document.querySelector("#searchInput");
@@ -116,8 +125,8 @@ export async function loadExploreFeed() {
   if (state.query || isTokusatsuMode()) return;
 
   try {
-    const payloads = await Promise.all(
-      EXPLORE_QUERIES.map((query) => fetchAnimeSearch(query).catch(() => []))
+    const payloads = await mapWithConcurrency(
+      EXPLORE_QUERIES, (query) => fetchAnimeSearch(query).catch(() => []), 3
     );
     state.exploreItems = mergeAnimeResults(
       [...state.exploreItems, ...payloads.flat()],
@@ -130,12 +139,15 @@ export async function loadExploreFeed() {
 }
 
 export async function runSearch(query) {
+  const requestId = ++searchRequestId;
+  const mode = state.contentMode;
+  const isCurrent = () => requestId === searchRequestId && state.query === query && state.contentMode === mode;
   state.query = query;
   state.browseMode = null;
   const input = document.querySelector("#searchInput");
   if (input && input.value.trim() !== query) input.value = query;
   document.querySelector("#searchClear")?.toggleAttribute("hidden", !query);
-  pageTitle.textContent = isTokusatsuMode() ? `搜索：${query}` : `搜索：${query}`;
+  pageTitle.textContent = `搜索：${query}`;
   updateSearchChrome();
   syncExplorePanelsForSearch();
   document.querySelector("#statusLine").textContent = isTokusatsuMode()
@@ -147,6 +159,7 @@ export async function runSearch(query) {
   try {
     if (isTokusatsuMode()) {
       const items = await searchTokuzillaCatalog(query);
+      if (!isCurrent()) return;
       state.searchItems = items;
       document.querySelector("#statusLine").textContent = items.length
         ? `在 Tokuzilla 找到 ${items.length} 个特摄条目。`
@@ -158,6 +171,7 @@ export async function runSearch(query) {
         .sort((a, b) => b.matchScore - a.matchScore);
       const queryCandidates = getQueryCandidates(query, localMatches);
       const payloads = await Promise.all(queryCandidates.map(fetchAnimeSearch));
+      if (!isCurrent()) return;
       const items = mergeAnimeResults([...payloads.flat(), ...localMatches], query);
       state.searchItems = items.length
         ? items
@@ -167,6 +181,7 @@ export async function runSearch(query) {
         : "没有找到完全匹配，先显示热门示例。";
     }
   } catch (error) {
+    if (!isCurrent()) return;
     console.warn(error);
     state.searchItems = isTokusatsuMode()
       ? []
@@ -175,12 +190,19 @@ export async function runSearch(query) {
       ? "Tokuzilla 搜索暂时不可用，请稍后再试。"
       : "联网搜索暂时不可用，已显示本地示例。稍后可以再试一次。";
   } finally {
-    resultsGrid.removeAttribute("aria-busy");
-    renderResults();
+    if (isCurrent()) {
+      resultsGrid.removeAttribute("aria-busy");
+      renderResults();
+    }
   }
 }
 
 export function renderResults() {
+  if (document.hidden || document.querySelector(".app-shell")?.classList.contains("is-watching")) {
+    deferredRender = true;
+    return;
+  }
+  deferredRender = false;
   const visibleItems = getVisibleItems();
   const searching = Boolean(state.query);
 
@@ -226,7 +248,7 @@ function renderDashboard(items) {
   }
 
   const ranked = rankItems(items);
-  const heroSource = getHeroSource(items);
+  const heroSource = getHeroSource(items, ranked);
   const heroItems = heroSource.slice(0, HERO_PREVIEW);
 
   const continueItems = resolveHistoryItems(
@@ -239,9 +261,9 @@ function renderDashboard(items) {
   ]);
   const recommendItems = ranked.filter((item) => !usedIds.has(item.id));
 
-  heroItems.forEach((item) => heroRow.append(createPortraitCard(item)));
-  continueItems.forEach((item) => continueRow.append(createPortraitCard(item, { continue: true })));
-  recommendItems.forEach((item) => recommendGrid.append(createPortraitCard(item)));
+  heroRow.replaceChildren(...heroItems.map((item) => createPortraitCard(item)));
+  continueRow.replaceChildren(...continueItems.map((item) => createPortraitCard(item, { continue: true })));
+  recommendGrid.replaceChildren(...recommendItems.map((item) => createPortraitCard(item)));
 
   heroCount.textContent = isTokusatsuMode()
     ? `Tokuzilla 最新 · 共 ${heroSource.length} 部`
@@ -317,9 +339,7 @@ function renderHeroBrowse(items) {
   searchResultCount.textContent = isTokusatsuMode()
     ? `共 ${heroSource.length} 部 · 按年份排序，向下滚动浏览`
     : `共 ${heroSource.length} 部 · 按评分排序，向下滚动浏览`;
-  heroSource.forEach((item) => {
-    resultsGrid.append(createPortraitCard(item));
-  });
+  resultsGrid.replaceChildren(...heroSource.map((item) => createPortraitCard(item)));
   syncExplorePanels();
 }
 
@@ -348,9 +368,7 @@ function renderSearchGrid(visibleItems) {
   }
 
   searchResultCount.textContent = `已显示 ${visibleItems.length} 个结果`;
-  visibleItems.forEach((item) => {
-    resultsGrid.append(createPortraitCard(item));
-  });
+  resultsGrid.replaceChildren(...visibleItems.map((item) => createPortraitCard(item)));
   syncExplorePanels();
 }
 

@@ -19,6 +19,7 @@ const COVER_CHECK_MS = 100;
 
 let availability = null;
 let fullscreen = false;
+let controlsLocked = false;
 
 function plugin() {
   return window.Capacitor?.Plugins?.NativePlayer;
@@ -35,6 +36,7 @@ export function nativePlayerAvailable() {
 
 export function exitNativeFullscreen() {
   if (!fullscreen) return false;
+  if (controlsLocked) return true;
   plugin()?.setFullscreen({ value: false }).catch(() => {});
   return true;
 }
@@ -54,10 +56,20 @@ export function createNativeVideo(frame, hooks = {}) {
   let lastVisible = null;
   let coveredNow = false;
 
+  const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  const syncTheme = () => api.setInfo({ dark: document.documentElement.dataset.theme === "dark", accent: accentColor() }).catch(() => {});
+
+  const syncVisibility = () => {
+    if (document.hidden || fullscreen) stopSync();
+    else startSync();
+  };
+
   const emit = (type) => events.dispatchEvent(new Event(type));
 
   function listen() {
     if (handles.length) return;
+    document.addEventListener("anime:theme-changed", syncTheme);
+    document.addEventListener("visibilitychange", syncVisibility);
     const add = (name, handler) => handles.push(Promise.resolve(api.addListener(name, handler)));
     add("progress", (data) => {
       position = Number(data?.position) || 0;
@@ -78,12 +90,17 @@ export function createNativeVideo(frame, hooks = {}) {
       if (Number.isInteger(index) && index >= 0) hooks.onEpisode?.(index);
     });
     add("back", () => hooks.onBack?.());
+    add("lock", (data) => { controlsLocked = Boolean(data?.locked); });
     add("fullscreen", (data) => {
       fullscreen = Boolean(data?.value);
+      if (!fullscreen) controlsLocked = false;
+      syncVisibility();
     });
   }
 
   function unlisten() {
+    document.removeEventListener("anime:theme-changed", syncTheme);
+    document.removeEventListener("visibilitychange", syncVisibility);
     handles.forEach((pending) => pending.then((handle) => handle?.remove?.()).catch(() => {}));
     handles = [];
   }
@@ -113,12 +130,13 @@ export function createNativeVideo(frame, hooks = {}) {
   }
 
   function sync(now) {
-    raf = requestAnimationFrame(sync);
+    raf = 0;
     if (!frame.isConnected) {
       stop();
       return;
     }
     if (document.hidden || fullscreen) return;
+    raf = requestAnimationFrame(sync);
     const rect = frameRect();
     if (rect) {
       const key = `${rect.x},${rect.y},${rect.width},${rect.height}`;
@@ -139,7 +157,7 @@ export function createNativeVideo(frame, hooks = {}) {
   }
 
   function startSync() {
-    if (raf) return;
+    if (raf || document.hidden || fullscreen) return;
     lastRect = "";
     lastVisible = null;
     lastCoverCheck = -Infinity;
@@ -155,6 +173,7 @@ export function createNativeVideo(frame, hooks = {}) {
     stopSync();
     unlisten();
     fullscreen = false;
+    controlsLocked = false;
     position = 0;
     duration = NaN;
     paused = true;
@@ -203,6 +222,7 @@ export function createNativeVideo(frame, hooks = {}) {
         title: info.title || "",
         hasNext: Boolean(info.hasNext),
         dark: document.documentElement.dataset.theme === "dark",
+        accent: accentColor(),
         episodes: info.episodes || [],
         episodeIndex: info.episodeIndex || 0,
         rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
@@ -211,7 +231,7 @@ export function createNativeVideo(frame, hooks = {}) {
       emit("loadedmetadata");
     },
     setInfo(info = {}) {
-      api.setInfo({ ...info, dark: document.documentElement.dataset.theme === "dark", title: info.title || "", hasNext: Boolean(info.hasNext) }).catch(() => {});
+      api.setInfo({ ...info, accent: accentColor(), dark: document.documentElement.dataset.theme === "dark", title: info.title || "", hasNext: Boolean(info.hasNext) }).catch(() => {});
     },
     stop,
   };

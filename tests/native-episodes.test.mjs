@@ -13,11 +13,13 @@ test("native episode selection routes valid indexes and keeps fullscreen on load
   };
   const code = readFileSync(new URL("../client/native/native-player.js", import.meta.url), "utf8")
     .replace(/^import .*;\r?\n/, "").replaceAll("export function ", "function ");
+  const frames = new Set();
   const context = {
     window: { Capacitor: { Plugins: { NativePlayer: api } }, devicePixelRatio: 1, location: { href: "https://localhost/" } },
-    document: { documentElement: { dataset: { theme: "dark" } } },
+    document: { addEventListener() {}, removeEventListener() {}, documentElement: { dataset: { theme: "dark" } } },
+    getComputedStyle: () => ({ getPropertyValue: () => "#d0b4f4" }),
     navigator: { userAgent: "test" }, EventTarget, Event, URL,
-    requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    requestAnimationFrame: () => { frames.add(1); return 1; }, cancelAnimationFrame: id => frames.delete(id),
   };
   vm.createContext(context);
   vm.runInContext(code, context);
@@ -27,7 +29,13 @@ test("native episode selection routes valid indexes and keeps fullscreen on load
   await media.attach({ url: "/video.mp4" }, 0, info);
   assert.deepEqual(calls[0][1].episodes, info.episodes);
   assert.equal(calls[0][1].episodeIndex, 1);
+  assert.equal(frames.size, 1);
   listeners.get("fullscreen")({ value: true });
+  assert.equal(frames.size, 0);
+  listeners.get("lock")({ locked: true });
+  assert.equal(context.exitNativeFullscreen(), true);
+  assert.equal(calls.some(([name]) => name === "fullscreen"), false);
+  listeners.get("lock")({ locked: false });
   listeners.get("episode")({ index: 2 });
   listeners.get("episode")({ index: -1 });
   listeners.get("episode")({ index: 0.5 });
@@ -36,6 +44,9 @@ test("native episode selection routes valid indexes and keeps fullscreen on load
   await media.attach({ url: "/next.mp4" }, 0, { ...info, episodeIndex: 2 });
   assert.equal(calls.some(([name]) => name === "stop" || name === "fullscreen"), false);
   assert.equal(calls.find(([name]) => name === "info")[1].loading, true);
+  assert.equal(frames.size, 0);
+  listeners.get("fullscreen")({ value: false });
+  assert.equal(frames.size, 1);
   media.stop();
   await Promise.resolve();
   assert.equal(listeners.size, 0);

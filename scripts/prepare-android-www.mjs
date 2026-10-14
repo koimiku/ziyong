@@ -7,6 +7,15 @@ const OUT = join(ROOT, "android-www");
 const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const APP_VERSION = String(PKG.version || "0.0.0");
 
+let releaseNotes = "anime Android " + APP_VERSION;
+try {
+  const currentUpdate = JSON.parse(readFileSync(join(ROOT, "update.json"), "utf8"));
+  if (currentUpdate.version === APP_VERSION && typeof currentUpdate.notes === "string" && currentUpdate.notes.trim()) {
+    releaseNotes = currentUpdate.notes;
+  }
+} catch {
+  // New checkouts can generate the manifest without an existing update file.
+}
 const FILES = [
   "index.html",
   "styles.css",
@@ -37,7 +46,7 @@ writeFileSync(
     {
       version: APP_VERSION,
       name: `v${APP_VERSION}`,
-      notes: `anime Android ${APP_VERSION}`,
+      notes: releaseNotes,
       htmlUrl: `https://github.com/koimiku/ziyong/releases/tag/v${APP_VERSION}`,
       apkUrl: `https://github.com/koimiku/ziyong/releases/download/v${APP_VERSION}/app-release.apk`,
     },

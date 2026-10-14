@@ -44,7 +44,6 @@ export const watchSources = [
 ];
 
 export const onlineSources = watchSources.filter((source) => source.kind === "online");
-export const sourceNamesText = onlineSources.map((source) => source.name).join("、");
 
 // 只填写你有权使用、且平台允许嵌入的播放器地址。
 export const authorizedPlayers = [];
