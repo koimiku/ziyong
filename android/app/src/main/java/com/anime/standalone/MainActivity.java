@@ -4,6 +4,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import androidx.core.view.WindowCompat;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
@@ -13,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ApkUpdaterPlugin.class);
         registerPlugin(MediaSnifferPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
+        SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         bridge.getWebView().setWebChromeClient(new FullscreenChromeClient(bridge));
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);

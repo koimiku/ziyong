@@ -18,8 +18,8 @@
     <link rel="icon" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <link rel="stylesheet" href="./styles.css" /><link rel="stylesheet" href="./client/ui-polish.css" /><link rel="stylesheet" href="./client/motion.css" /><link rel="stylesheet" href="./client/kazumi-ui.css" />
-  </head>
-  <body>
+  <link rel="stylesheet" href="./client/startup.css" /></head>
+  <body><script src="./client/startup.js"></script>
     <header class="desktop-titlebar" id="desktopTitlebar" hidden aria-label="窗口标题栏">
       <div class="desktop-titlebar-drag">
         <span class="desktop-titlebar-mark" aria-hidden="true">A</span>
@@ -263,7 +263,19 @@
         </section>
 
         <section class="settings-view" id="settingsView" hidden aria-label="设置">
-          <div class="settings-card" id="mobileInstallGuide">
+                    <div class="settings-card" id="startupCard">
+            <h2>开屏</h2>
+            <label class="startup-toggle">显示开屏动画<input id="startupEnabled" type="checkbox" /></label>
+            <p class="settings-update-desc">关闭后直接进入首页。自定义图片仅保存在当前设备，系统启动过渡可能短暂出现。</p>
+            <img id="startupPreview" alt="当前开屏图片" hidden />
+            <input id="startupImage" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <div class="settings-update-actions">
+              <button id="startupChoose" class="small-button settings-action" type="button">选择图片</button>
+              <button id="startupShow" class="ghost-button settings-action" type="button">预览</button>
+              <button id="startupReset" class="ghost-button settings-action" type="button">恢复默认</button>
+            </div>
+            <p id="startupStatus" class="settings-update-status" role="status" aria-live="polite"></p>
+          </div><div class="settings-card" id="mobileInstallGuide">
             <h3>安装到手机</h3>
             <p class="install-guide-ready" hidden>你的浏览器支持一键安装，点下方按钮即可。</p>
             <p class="install-guide-android">
