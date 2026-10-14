@@ -15,7 +15,7 @@ const SAMPLE_POINTS = [
   [0.5, 0.25],
   [0.5, 0.75],
 ];
-const COVER_CHECK_EVERY = 6;
+const COVER_CHECK_MS = 100;
 
 let availability = null;
 let fullscreen = false;
@@ -50,7 +50,7 @@ export function createNativeVideo(frame, hooks = {}) {
   let paused = true;
   let handles = [];
   let raf = 0;
-  let tick = 0;
+  let lastCoverCheck = -Infinity;
   let lastRect = "";
   let lastVisible = null;
   let coveredNow = false;
@@ -109,12 +109,13 @@ export function createNativeVideo(frame, hooks = {}) {
     });
   }
 
-  function sync() {
+  function sync(now) {
     raf = requestAnimationFrame(sync);
     if (!frame.isConnected) {
       stop();
       return;
     }
+    if (document.hidden || fullscreen) return;
     const rect = frameRect();
     if (rect) {
       const key = `${rect.x},${rect.y},${rect.width},${rect.height}`;
@@ -123,7 +124,10 @@ export function createNativeVideo(frame, hooks = {}) {
         api.setRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }).catch(() => {});
       }
     }
-    if (tick++ % COVER_CHECK_EVERY === 0) coveredNow = rect ? isCovered(rect.css) : true;
+    if (now - lastCoverCheck >= COVER_CHECK_MS) {
+      lastCoverCheck = now;
+      coveredNow = rect ? isCovered(rect.css) : true;
+    }
     const visible = Boolean(rect) && !coveredNow;
     if (visible !== lastVisible) {
       lastVisible = visible;
@@ -135,7 +139,7 @@ export function createNativeVideo(frame, hooks = {}) {
     if (raf) return;
     lastRect = "";
     lastVisible = null;
-    tick = 0;
+    lastCoverCheck = -Infinity;
     raf = requestAnimationFrame(sync);
   }
 

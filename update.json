@@ -1,7 +1,7 @@
 {
-  "version": "1.5.4",
-  "name": "v1.5.4",
-  "notes": "采用 Kazumi 风格的简洁绿色界面、三列海报与轻量详情页，修复播放器启动图背景遮挡。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.4",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.4/app-release.apk"
+  "version": "1.5.5",
+  "name": "v1.5.5",
+  "notes": "优化导航与详情页过渡，减少大量海报同时动画；支持快速切换取消旧动画，降低全屏播放和高刷新率设备的重复界面检查。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.5",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.5/app-release.apk"
 }

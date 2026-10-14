@@ -8,6 +8,8 @@ function isMobileLayout() {
 }
 
 let currentView = "";
+let enterFrame = 0;
+let enterAnimation = null;
 
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -18,12 +20,12 @@ function animateViewEnter(view) {
     view === "miru" ? "#miruView" : view === "settings" ? "#settingsView" : "#dashboardView:not([hidden]), #resultsView:not([hidden])";
   const element = document.querySelector(selector);
   if (!element || element.hidden || typeof element.animate !== "function" || prefersReducedMotion()) return;
-  element.animate(
+  enterAnimation = element.animate(
     [
-      { opacity: 0, transform: "translateY(12px)" },
+      { opacity: 0, transform: "translateY(8px)" },
       { opacity: 1, transform: "none" },
     ],
-    { duration: 320, easing: "cubic-bezier(.05, .7, .1, 1)" }
+    { duration: 240, easing: "cubic-bezier(.05, .7, .1, 1)" }
   );
 }
 
@@ -31,7 +33,15 @@ export function setAppView(view) {
   if (!VIEWS.includes(view)) view = "explore";
   const changed = currentView !== "" && currentView !== view;
   currentView = view;
-  if (changed) requestAnimationFrame(() => animateViewEnter(view));
+  if (changed) {
+    cancelAnimationFrame(enterFrame);
+    enterAnimation?.cancel();
+    enterAnimation = null;
+    enterFrame = requestAnimationFrame(() => {
+      enterFrame = 0;
+      if (currentView === view) animateViewEnter(view);
+    });
+  }
 
   document.querySelectorAll("[data-nav-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.navView === view);

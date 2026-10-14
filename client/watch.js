@@ -36,6 +36,7 @@ let activePlayerController = null;
 let lastCardOrigin = null;
 let returnPoster = null;
 let exitingDetail = false;
+let coverExpansion = null;
 
 document.addEventListener(
   "click",
@@ -72,6 +73,8 @@ function createCoverGhost(cover, rect) {
 }
 
 function playCardExpansion() {
+  coverExpansion?.cancel();
+  coverExpansion = null;
   const origin = lastCardOrigin;
   lastCardOrigin = null;
   if (!origin || performance.now() - origin.time > 1500) return;
@@ -92,9 +95,11 @@ function playCardExpansion() {
   const sy = from.height / target.height;
   const animation = ghost.animate(
     [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: "none" }],
-    { duration: 460, easing: "cubic-bezier(.2, 0, 0, 1)" }
+    { duration: 320, easing: "cubic-bezier(.2, 0, 0, 1)" }
   );
+  coverExpansion = animation;
   const done = () => {
+    if (coverExpansion === animation) coverExpansion = null;
     ghost.remove();
     page.classList.remove("is-expanding");
   };
@@ -130,6 +135,8 @@ export function stopActivePlayback() {
 // into the card it was opened from.
 export function exitWatchMode() {
   if (exitingDetail) return;
+  coverExpansion?.cancel();
+  coverExpansion = null;
   const page = detailPanel.querySelector(".entry-page");
   if (!page || prefersReducedMotion() || typeof page.animate !== "function") {
     finishExitWatchMode();
@@ -147,9 +154,9 @@ export function exitWatchMode() {
   const fade = page.animate(
     [
       { opacity: 1, transform: "none" },
-      { opacity: 0, transform: "translateY(28px) scale(.985)" },
+      { opacity: 0, transform: "translateY(12px)" },
     ],
-    { duration: 220, easing: "cubic-bezier(.3, 0, .8, .15)", fill: "forwards" }
+    { duration: 160, easing: "cubic-bezier(.3, 0, .8, .15)", fill: "forwards" }
   );
   fade.finished
     .catch(() => {})
@@ -218,7 +225,7 @@ function flyCoverBack(ghost, from) {
         borderRadius: "12px",
       },
     ],
-    { duration: 420, easing: "cubic-bezier(.2, 0, 0, 1)", fill: "forwards" }
+    { duration: 280, easing: "cubic-bezier(.2, 0, 0, 1)", fill: "forwards" }
   );
   flight.finished
     .catch(() => {})
