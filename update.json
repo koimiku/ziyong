@@ -1,7 +1,7 @@
 {
-  "version": "1.5.9",
-  "name": "v1.5.9",
-  "notes": "新增收藏追番分类、全屏播放器锁定及快进85秒；提供六种独立浅深色配色，修复搜索卡片拥挤，减少播放期间后台渲染和检查开销。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.9",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.9/app-release.apk"
+  "version": "1.5.10",
+  "name": "v1.5.10",
+  "notes": "新增 WebDAV 备份恢复、规则编辑与文件分享；支持 Bangumi 收藏同步，优化收藏状态菜单及全屏锁定与快进85秒按钮。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.5.10",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.5.10/app-release.apk"
 }

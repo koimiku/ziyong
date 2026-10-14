@@ -1,3 +1,4 @@
+import { enhanceNativeSelects } from "./compact-select.js";
 import { getCollectionStatus, setCollectionStatus } from "./collection-store.js";
 import { authorizedPlayers, allowedEmbedHosts } from "./config.js";
 import { isTokusatsuMode } from "./content-mode.js";
@@ -237,6 +238,7 @@ function flyCoverBack(ghost, from) {
 }
 
 function finishExitWatchMode() {
+  cleanupCollectionStatus();
   stopActivePlayback();
   document.body.classList.remove("source-sheet-open");
   appShell.classList.remove("is-watching");
@@ -251,7 +253,10 @@ function finishExitWatchMode() {
   document.dispatchEvent(new CustomEvent("anime:watch-ended"));
 }
 
+let cleanupCollectionStatus = () => {};
+
 export async function showDetails(item, options = {}) {
+  cleanupCollectionStatus();
   exitingDetail = false;
   returnPoster = null;
   stopActivePlayback();
@@ -267,19 +272,28 @@ export async function showDetails(item, options = {}) {
   syncMobileWatchState();
 
   detailPanel.innerHTML = renderEntryShell(item, title, players, resume);
-  const collectionSelect = detailPanel.querySelector("#collectionStatus");
-  collectionSelect.value = getCollectionStatus(item.id);
-  collectionSelect.addEventListener("change", () => {
+  const collectionControl = detailPanel.querySelector("#collectionStatus");
+  const refreshCollectionControl = () => {
+    const selected = getCollectionStatus(item.id);
+    collectionControl.value = selected;
+    collectionControl.closest(".detail-collection").dataset.collected = String(Boolean(selected));
+  };
+  enhanceNativeSelects(detailPanel);
+  refreshCollectionControl();
+  document.addEventListener("anime:collection-changed", refreshCollectionControl);
+  cleanupCollectionStatus = () => document.removeEventListener("anime:collection-changed", refreshCollectionControl);
+  collectionControl.addEventListener("change", () => {
     try {
-      setCollectionStatus(item, collectionSelect.value);
-      detailPanel.querySelector("#collectionStatusHint").textContent = collectionSelect.value ? "已保存" : "已移出收藏";
+      const status = collectionControl.value;
+      setCollectionStatus(item, status);
+      refreshCollectionControl();
+      detailPanel.querySelector("#collectionStatusHint").textContent = status ? "已保存，登录 Bangumi 后自动同步" : "已移出本机收藏";
     } catch {
-      collectionSelect.value = getCollectionStatus(item.id);
+      refreshCollectionControl();
       detailPanel.querySelector("#collectionStatusHint").textContent = "保存失败，请检查设备存储空间";
     }
   });
   playCardExpansion();
-
   document.querySelector("#watchBackButton")?.addEventListener("click", () => {
     exitWatchMode();
   });
@@ -547,7 +561,7 @@ function renderEntryShell(item, title, players, resume) {
             <h1>${escapeHtml(title)}</h1>
             <p class="entry-aliases">${escapeHtml(item.aliases.join(" / "))}</p>
             ${resumeHint}
-            <div class="detail-collection"><label for="collectionStatus">收藏状态</label><select id="collectionStatus"><option value="">未收藏</option><option value="planned">想看</option><option value="watching">在看</option><option value="completed">看完</option></select><span id="collectionStatusHint" role="status"></span></div>
+            <div class="detail-collection"><select id="collectionStatus" aria-label="收藏状态"><option value="">未收藏</option><option value="planned">想看</option><option value="watching">在看</option><option value="completed">看过</option></select><span id="collectionStatusHint" role="status" aria-live="polite"></span></div>
             <div class="detail-stats entry-stats">
               <div class="stat"><strong>${escapeHtml(item.displayType || (tokusatsu ? "特摄" : "动画"))}</strong><span>类型</span></div>
               <div class="stat"><strong>${escapeHtml(String(item.episodes || "未知"))}</strong><span>集数</span></div>
@@ -655,7 +669,6 @@ function renderWatchPanels(playlist, episodeSourceMap, resume) {
             <button class="player-switch-source" type="button" data-change-source>更换片源</button>
           </div>
         </div>
-        <button class="ghost-button player-skip85" id="playerSkip85" type="button">快进 85 秒</button>
         <div class="player-meta" id="sourcePlayerMeta">
           ${escapeHtml(playlist.matchName)} · ${escapeHtml(initialLine.name)} · ${escapeHtml(initialEpisode.label)}
         </div>

@@ -24,6 +24,8 @@ export function initializeAndroidBackButton() {
 
 function handleAndroidBack(App) {
   if (exitNativeFullscreen()) return;
+  const dialog=document.querySelector("dialog[open]");
+  if(dialog){dialog.close();return;}
 
   const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
   if (fullscreen) {

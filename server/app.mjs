@@ -1,3 +1,4 @@
+import { handleWebdav } from "./webdav.mjs";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { createServer } from "node:http";
@@ -15,6 +16,7 @@ import { handleBangumiCalendar, warmupBangumiCalendar } from "./bangumi.mjs";
 import { handleBangumiGateway } from "./bangumi-gateway.mjs";
 import { handleServerInfo, handleServerQr, setServerInfo } from "./info.mjs";
 import {
+  handleKazumiExport,
   handleKazumiImport,
   handleKazumiInstall,
   handleKazumiInstalled,
@@ -44,6 +46,8 @@ export function startServer({ port = defaultPort, host = "127.0.0.1" } = {}) {
     const server = createServer(async (request, response) => {
       const url = new URL(request.url, "http://localhost");
 
+      if (url.pathname === "/api/webdav") { await handleWebdav(request, response); return; }
+      if (url.pathname === "/api/kazumi/export") { await handleKazumiExport(url, response); return; }
       if (url.pathname === "/api/source-search") {
         await handleSourceSearch(url, response);
         return;

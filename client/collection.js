@@ -28,7 +28,7 @@ export function initializeCollection() {
     }));
     if (!items.length) {
       const empty = document.createElement("p"); empty.className = "inline-empty";
-      empty.textContent = "还没有收藏。在详情页选择“想看、在看、看完”即可加入。"; grid.append(empty);
+      empty.textContent = "还没有收藏。在详情页选择“想看、在看、看过”即可加入。"; grid.append(empty);
     }
     tabs.querySelectorAll("button").forEach(button => {
       const active = button.dataset.collectionFilter === status;

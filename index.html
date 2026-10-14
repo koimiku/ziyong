@@ -274,7 +274,7 @@
             <button type="button" data-collection-filter="all">全部</button>
             <button type="button" data-collection-filter="planned">想看</button>
             <button type="button" data-collection-filter="watching">在看</button>
-            <button type="button" data-collection-filter="completed">看完</button>
+            <button type="button" data-collection-filter="completed">看过</button>
           </div>
           <div class="results-grid" id="collectionGrid"></div>
         </section>        <section class="settings-view" id="settingsView" hidden aria-label="设置">
@@ -312,10 +312,20 @@
               <a class="ghost-button settings-update-link settings-action" id="settingsOpenReleases" href="https://github.com/koimiku/ziyong/releases" target="_blank" rel="noreferrer">打开 Releases</a>
             </div>
           </div>
+          <div class="settings-card" id="webdavCard">
+            <h3>WebDAV 备份</h3><p class="settings-update-desc">备份规则、收藏、观看记录和外观设置。Bangumi Token 与 WebDAV 密码不进入备份。</p>
+            <div class="backup-fields"><label>备份目录地址<input id="webdavUrl" type="url" placeholder="https://服务器/dav/备份目录/" autocomplete="off" /></label>
+            <label>用户名<input id="webdavUsername" type="text" autocomplete="off" /></label>
+            <label>密码（仅本次使用）<input id="webdavPassword" type="password" autocomplete="off" /></label></div>
+            <div class="settings-update-actions"><button id="webdavTest" class="ghost-button" type="button">测试连接</button><button id="webdavUpload" class="small-button" type="button">上传备份</button><button id="webdavPreview" class="ghost-button" type="button">读取备份</button><button id="backupExport" class="ghost-button" type="button">导出本机备份</button><button id="backupImport" class="ghost-button" type="button">导入备份文件</button><button id="backupRecovery" class="ghost-button" type="button" hidden>导出恢复前副本</button></div>
+            <input id="backupImportFile" type="file" accept=".json,application/json" hidden />
+            <div id="backupPreview" class="backup-preview" hidden><p id="backupPreviewText"></p><p>同名规则与设置会覆盖；观看记录和收藏按条目合并。恢复前会保留本机副本。</p><button id="backupRestore" class="small-button" type="button">确认恢复</button></div>
+            <p id="webdavStatus" class="settings-update-status" role="status" aria-live="polite"></p>
+          </div>
           <div class="settings-card" id="bangumiSyncCard">
             <h3>Bangumi 同步</h3>
             <p class="settings-update-desc">
-              像 Animeko 一样用 Bangumi 账号同步<strong>番剧看到第几集</strong>（电脑/手机同一账号）。集内秒数仍只保存在本机。
+              同步收藏状态与观看集数。同一 Bangumi 账号可在不同设备使用，集内播放位置保存在本机。
             </p>
             <p id="bangumiUserLine">未登录</p>
             <p class="settings-update-status" id="bangumiSyncStatus" role="status" aria-live="polite"></p>
@@ -367,6 +377,7 @@
             <label class="health-auto-toggle"><input id="sourceHealthAuto" type="checkbox" checked />自动检测 · 每 10 分钟</label>
           </div>
           <p class="sources-health-note">检查搜索接口是否正常；连续异常会标记为暂不可用。单集是否可播放仍以实际播放结果为准。</p>
+          <div class="rule-tools"><button id="ruleNew" type="button" class="ghost-button">新建规则</button><button id="ruleImportFileButton" type="button" class="ghost-button">导入规则文件</button><input id="ruleImportFile" type="file" accept=".json,application/json" hidden /></div>
           <form class="kazumi-import" id="kazumiImportForm">
             <input id="kazumiImportInput" type="text" placeholder="规则名、规则 JSON 链接，或粘贴整段 JSON" autocomplete="off" enterkeyhint="done" />
             <button class="small-button" type="submit">导入规则</button>
@@ -418,7 +429,13 @@
       </form>
     </div>
 
-    <div class="lan-connect-backdrop" id="lanConnectBackdrop"></div>
+    <dialog id="ruleEditor" class="rule-editor">
+      <header><h3 id="ruleEditorTitle">编辑规则</h3><button id="ruleEditorClose" type="button" class="ghost-button" aria-label="关闭规则编辑器">关闭</button></header>
+      <label for="ruleEditorText">规则 JSON</label>
+      <textarea id="ruleEditorText" spellcheck="false" autocomplete="off" aria-describedby="ruleEditorStatus"></textarea>
+      <p id="ruleEditorStatus" role="status" aria-live="polite"></p>
+      <footer><button id="ruleFormat" class="ghost-button" type="button">校验与格式化</button><button id="ruleCopy" class="ghost-button" type="button">复制</button><button id="ruleShare" class="ghost-button" type="button">分享文件</button><button id="ruleSave" class="small-button" type="button">保存规则</button></footer>
+    </dialog>    <div class="lan-connect-backdrop" id="lanConnectBackdrop"></div>
     <section class="lan-connect-dialog" id="lanConnectDialog" aria-label="手机连接">
       <div class="lan-connect-card">
         <h2>手机扫码观看</h2>

@@ -1,3 +1,5 @@
+import { initializeWebdav } from "./client/webdav.js";
+import { initializeRuleEditor } from "./client/rule-editor.js";
 import { initializeCollection } from "./client/collection.js";
 import { fallbackAnime } from "./client/config.js";
 import { decorateAnime } from "./client/bangumi.js";
@@ -92,6 +94,8 @@ try {
   enhanceNativeSelects();
   initializeTheme();
   initializeCollection();
+  initializeWebdav();
+  initializeRuleEditor();
   initializeSearchDialog();
   initializeMediaRows();
   document.addEventListener("anime:watch-ended", () => {

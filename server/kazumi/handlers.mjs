@@ -109,3 +109,12 @@ export {
   resolveKazumiPlay,
   searchKazumi,
 };
+
+export async function handleKazumiExport(url, response) {
+  try {
+  await ensureKazumiReady();
+  const name = url.searchParams.get("name");
+  const rules = name ? [getKazumiRule(name)].filter(Boolean) : listKazumiRules().map(item => getKazumiRule(item.name));
+  writeJson(response, name && !rules.length ? 404 : 200, { rules });
+  } catch(error) { writeJson(response,502,{error:String(error.message || error)}); }
+}

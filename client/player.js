@@ -614,11 +614,6 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     document.addEventListener("click", () => closeOptionDropdowns());
   }
 
-  document.querySelector("#playerSkip85")?.addEventListener("click", () => {
-    if (!state.started || !(media.duration > 0)) return;
-    const limit = Number.isFinite(media.duration) && media.duration > 0 ? Math.max(0, media.duration - 1) : Infinity;
-    media.currentTime = Math.min(limit, Math.max(0, media.currentTime || 0) + 85);
-  });
   stopPlayback();
   updateChrome();
   if (context.autoplay) startPlayback();

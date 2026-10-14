@@ -1,3 +1,4 @@
+import { openRuleEditor, shareRule } from "./rule-editor.js";
 import {
   fetchKazumiInstalled,
   fetchKazumiRepo,
@@ -76,12 +77,18 @@ export async function initializeSourcesPanel() {
     }
   }
 
+  document.addEventListener("anime:rules-changed", () => void render({ preserveScroll: true, silent: true }));
   listEl.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-kazumi-name]");
     if (!button || button.disabled) return;
     event.preventDefault();
     const name = button.dataset.kazumiName;
     const action = button.dataset.kazumiAction;
+    if (action === "edit" || action === "share") {
+      try { if(action === "edit") await openRuleEditor(name); else await shareRule(name); }
+      catch(error) { statusEl.textContent=error.message || "规则操作失败"; }
+      return;
+    }
     setActionButtonBusy(button, action === "install" ? "安装中" : "移除中");
     try {
       if (action === "install") await installKazumiRule(name);
@@ -397,6 +404,12 @@ function createSourceCard(item) {
     button.dataset.kazumiAction = action;
     button.textContent = actionLabel;
     foot.append(button);
+    if (item.installed) {
+      for (const [key,label] of [["edit","编辑"],["share","分享"]]) {
+        const extra=document.createElement("button");extra.type="button";extra.className="ghost-button source-action-button";
+        extra.dataset.kazumiName=item.package || "";extra.dataset.kazumiAction=key;extra.textContent=label;foot.append(extra);
+      }
+    }
   }
 
   card.append(mark, body, foot);

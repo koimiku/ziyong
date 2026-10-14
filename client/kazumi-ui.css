@@ -725,10 +725,38 @@ body:not(.is-searching):not(.is-browsing-hero) #statusLine:not(.is-error) { disp
 .collection-card { text-align: left; padding: 0; color: var(--ink); font: inherit; }
 .collection-status { grid-area: label; font-size: 12px; color: var(--accent); }
 .detail-collection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
-.detail-collection select { border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; }
 #collectionStatusHint { font-size: 12px; color: var(--muted); }
-.player-skip85 { margin: 8px 12px; }
 body.is-mobile #collectionGrid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px 8px; }
 @media (max-width:350px) { body.is-mobile #collectionGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 
 .view-collection .stage-header, .view-collection .filter-bar, .view-collection #statusLine, .view-collection .mobile-server-hint { display: none !important; }
+
+.detail-collection { align-items: flex-start; flex-direction: column; gap: 8px; }
+.detail-collection .compact-select { width: fit-content; min-width: 128px; }
+.detail-collection .option-dropdown-trigger { min-height: 44px; padding: 0 16px; gap: 20px; border-radius: 24px; background: var(--m3-container-low); border-color: var(--m3-outline); color: var(--ink); }
+.detail-collection[data-collected="true"] .option-dropdown-trigger { background: var(--m3-secondary-container); color: var(--m3-on-secondary-container); border-color: transparent; }
+.detail-collection .option-dropdown-menu { min-width: 160px; border-radius: 16px; padding: 6px; background: var(--m3-container-high); box-shadow: 0 8px 24px #0002; }
+.detail-collection .option-dropdown-item { min-height: 44px; border-radius: 10px; }
+.view-collection .stage-header, .view-collection .filter-bar, .view-collection #statusLine, .view-collection .mobile-server-hint { display: none !important; }
+.detail-collection .compact-select { position: relative; }
+.detail-collection .option-dropdown-menu { position: absolute; left: 0; right: auto; top: calc(100% + 6px); z-index: 50; }
+.entry-hero:has(.detail-collection .option-dropdown.is-open) { overflow: visible; z-index: 20; }
+.entry-hero:has(.detail-collection .option-dropdown.is-open) .entry-hero-backdrop { clip-path: inset(0); }
+
+.backup-fields { display: grid; gap: 12px; margin: 16px 0; }
+.backup-fields label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.backup-fields input { width: 100%; min-height: 44px; border: 1px solid var(--m3-outline); border-radius: 12px; padding: 10px 12px; background: var(--input-bg); color: var(--ink); font: inherit; box-sizing: border-box; }
+#webdavCard .settings-update-actions { flex-wrap: wrap; gap: 8px; }
+.backup-preview { padding: 14px; margin-top: 14px; border-radius: 16px; background: var(--m3-container); font-size: 13px; line-height: 1.6; }
+#backupRecovery { margin-top: 8px; }
+.rule-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.source-card-foot { flex-wrap: wrap; gap: 6px; }
+.rule-editor { width: min(760px,calc(100vw - 32px)); max-height: 88dvh; padding: 20px; border: 0; border-radius: 24px; color: var(--ink); background: var(--m3-container-low); box-sizing: border-box; }
+.rule-editor::backdrop { background: #0007; }
+.rule-editor header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.rule-editor h3 { margin: 0; font-size: 18px; }
+.rule-editor label { font-size: 13px; color: var(--muted); }
+.rule-editor textarea { display: block; width: 100%; min-height: 280px; height: 42dvh; box-sizing: border-box; margin-top: 8px; padding: 14px; border: 1px solid var(--m3-outline); border-radius: 14px; background: var(--surface); color: var(--ink); font: 13px/1.6 ui-monospace,monospace; resize: vertical; }
+.rule-editor footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.rule-editor button { min-height: 44px; }
+#ruleEditorStatus { min-height: 20px; font-size: 13px; color: var(--muted); }

@@ -318,6 +318,12 @@ export async function handleNativeApi(input, init = {}) {
 
     if (path === "/api/kazumi/repo") return handleKazumiRepo();
     if (path === "/api/kazumi/seed") return handleKazumiSeed();
+    if (path === "/api/kazumi/export") {
+      await ensureKazumiReady();
+      const name = url.searchParams.get("name");
+      const rules = name ? [getKazumiRule(name)].filter(Boolean) : listKazumiRules().map(item => getKazumiRule(item.name));
+      return jsonResponse({ rules }, name && !rules.length ? 404 : 200);
+    }
     if (path === "/api/kazumi/installed") return handleKazumiInstalled();
     if (path === "/api/kazumi/sources") return handleKazumiSources();
     if (path === "/api/kazumi/install") return handleKazumiInstall(url);

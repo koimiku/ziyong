@@ -1,3 +1,4 @@
+import { getCollectionStatus, getPendingCollections, acknowledgeCollection, mergeBangumiCollections } from "./collection-store.js";
 import { bangumiRequest } from "./bangumi-http.js";
 import {
   getWatchHistory,
@@ -17,6 +18,15 @@ const EPISODE_BATCH = 80;
 
 let syncTimer = null;
 let syncPromise = null;
+const COLLECTION_TYPES = { planned: 1, completed: 2, watching: 3 };
+const COLLECTION_STATUS_BY_TYPE = { 1: "planned", 2: "completed", 3: "watching" };
+const knownCollectionTypes = new Map();
+let collectionTimer = null;
+let collectionPushPromise = null;
+document.addEventListener("anime:collection-changed", () => {
+  if (getPendingCollections().length && getBangumiToken()) scheduleCollectionPush();
+});
+window.addEventListener("online", () => { if (getBangumiToken()) scheduleCollectionPush(); });
 
 export function getBangumiToken() {
   try {
@@ -95,6 +105,8 @@ export async function loginBangumiWithToken(tokenInput) {
 }
 
 export function logoutBangumi() {
+  clearTimeout(collectionTimer);
+  knownCollectionTypes.clear();
   localStorage.removeItem(TOKEN_KEY);
   setUser(null);
   setMeta({ lastError: "", lastSyncAt: 0 });
@@ -141,7 +153,7 @@ function collectionToHistoryEntry(row) {
     title_cn: titleCn,
     displayType: subject?.platform || "TV",
     score: Number(subject?.score || 0) || null,
-    images: subject?.images || {},
+    images: subject?.images && Object.keys(subject.images).length ? subject.images : { large: "https://api.bgm.tv/v0/subjects/" + subjectId + "/image?type=large" },
     sourceUrl: `https://bgm.tv/subject/${subjectId}`,
     watchedAt: updatedAt,
     bangumi: {
@@ -176,17 +188,52 @@ async function readErrorDetail(response) {
   }
 }
 
-async function ensureAnimeCollection(token, subjectId, finished) {
-  const response = await bangumiRequest(`/v0/users/-/collections/${subjectId}`, {
-    method: "POST",
-    token,
-    body: { type: finished ? COLLECTION_COLLECT : COLLECTION_DOING },
+async function writeCollectionType(token, subjectId, type) {
+  const response = await bangumiRequest("/v0/users/-/collections/" + subjectId, {
+    method: "POST", token, body: { type },
   });
-  if (response.ok || response.status === 204) return;
-  const detail = await readErrorDetail(response);
-  throw new Error(`同步收藏状态失败 (${response.status})${detail ? `：${detail}` : ""}`);
+  if (!response.ok && response.status !== 204) {
+    throw new Error("收藏同步失败 (" + response.status + ")：" + await readErrorDetail(response));
+  }
+  knownCollectionTypes.set(subjectId, type);
 }
-
+async function ensureAnimeCollection(token, subjectId) {
+  const selected = COLLECTION_TYPES[getCollectionStatus(subjectId)];
+  if (selected) {
+    if (knownCollectionTypes.get(subjectId) !== selected) await writeCollectionType(token, subjectId, selected);
+    return;
+  }
+  if (knownCollectionTypes.has(subjectId)) return;
+  const username = getBangumiUser()?.username;
+  if (username) {
+    const response = await bangumiRequest("/v0/users/" + encodeURIComponent(username) + "/collections/" + subjectId, { token });
+    if (response.ok) { knownCollectionTypes.set(subjectId, Number((await response.json()).type)); return; }
+    if (response.status !== 404) throw new Error("读取收藏状态失败 (" + response.status + ")");
+  }
+  await writeCollectionType(token, subjectId, COLLECTION_DOING);
+}
+export function pushPendingCollections() {
+  if (collectionPushPromise) return collectionPushPromise;
+  collectionPushPromise = (async () => {
+    const token = getBangumiToken();
+    if (!token) return;
+    for (const entry of getPendingCollections()) {
+      if (getBangumiToken() !== token) return;
+      await writeCollectionType(token, Number(entry.id), COLLECTION_TYPES[entry.collectionStatus]);
+      acknowledgeCollection(entry);
+    }
+  })().finally(() => { collectionPushPromise = null; });
+  return collectionPushPromise;
+}
+function scheduleCollectionPush() {
+  clearTimeout(collectionTimer);
+  collectionTimer = setTimeout(() => {
+    pushPendingCollections().then(() => {
+      if (getPendingCollections().length && getBangumiToken()) scheduleCollectionPush();
+      else setMeta({ lastError: "" });
+    }).catch(error => setMeta({ lastError: String(error.message || error) }));
+  }, 500);
+}
 async function listMainEpisodeIds(token, subjectId, upToEpisode) {
   const ids = [];
   let offset = 0;
@@ -260,7 +307,16 @@ async function runBangumiSync(reason) {
 
   try {
     const collections = await fetchAllCollections(token, user.username);
+    for (const row of collections) knownCollectionTypes.set(Number(row.subject?.id || row.subject_id), Number(row.type));
     const remoteEntries = collections.map(collectionToHistoryEntry).filter(Boolean);
+    mergeBangumiCollections(collections.filter(row => COLLECTION_STATUS_BY_TYPE[Number(row.type)]).map(row => ({
+      ...collectionToHistoryEntry(row),
+      aliases: [row.subject?.name_cn, row.subject?.name].filter(Boolean),
+      collectionStatus: COLLECTION_STATUS_BY_TYPE[Number(row.type)],
+      collectionRemote: true,
+      collectionUpdatedAt: Date.parse(row.updated_at || "") || Date.now(),
+    })));
+    await pushPendingCollections();
     mergeExternalHistory(remoteEntries);
 
     // Push local anime progress that is ahead of Bangumi.
