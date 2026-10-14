@@ -27,6 +27,10 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.ListView;
+import android.widget.ArrayAdapter;
+import android.view.ViewGroup;
+import org.json.JSONArray;
 import dev.jdtech.mpv.MPVLib;
 import java.util.Locale;
 
@@ -41,6 +45,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         void onProgress(double position, double duration, boolean paused);
         void onEnded();
         void onNextRequested();
+        void onEpisodeRequested(int index);
         void onFullscreenRequested(boolean value);
         void onBackRequested();
     }
@@ -70,6 +75,10 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     private final TextView positionView;
     private final TextView durationView;
     private final TextView speedView;
+    private final TextView episodesButton;
+    private FrameLayout episodeOverlay;
+    private String[] episodeLabels = new String[0];
+    private int episodeIndex;
     private final TextView hintView;
     private final SeekBar seekBar;
     private final ProgressBar spinner;
@@ -206,6 +215,13 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         speedView.setPadding(dp(10), dp(8), dp(6), dp(8));
         speedView.setOnClickListener((v) -> cycleSpeed());
         bottomBar.addView(speedView, new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+        episodesButton = label(14);
+        episodesButton.setText("选集");
+        episodesButton.setGravity(Gravity.CENTER);
+        episodesButton.setContentDescription("选择集数");
+        episodesButton.setOnClickListener(v -> showEpisodes());
+        bottomBar.addView(episodesButton, new LinearLayout.LayoutParams(dp(56), dp(44)));
 
         fullscreenButton = iconButton(R.drawable.mpv_ic_fullscreen, "全屏");
         fullscreenButton.setOnClickListener((v) -> listener.onFullscreenRequested(!fullscreen));
@@ -385,10 +401,76 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     public void setFullscreen(boolean value) {
         fullscreen = value;
+        if (!value) closeEpisodes();
         applyChrome();
         showControls();
     }
 
+    public void setEpisodes(JSONArray episodes, int selected) {
+        episodeLabels = new String[episodes == null ? 0 : episodes.length()];
+        for (int i = 0; i < episodeLabels.length; i++) {
+            episodeLabels[i] = episodes.optString(i, "第 " + (i + 1) + " 集");
+        }
+        episodeIndex = selected;
+        closeEpisodes();
+        applyChrome();
+    }
+
+    public void prepareEpisode() {
+        pause();
+        loading = true;
+        updateSpinner();
+        showControls();
+    }
+
+    private void closeEpisodes() {
+        if (episodeOverlay == null) return;
+        removeView(episodeOverlay);
+        episodeOverlay = null;
+        scheduleHide();
+    }
+
+    private void showEpisodes() {
+        if (!fullscreen || episodeLabels.length == 0) return;
+        closeEpisodes();
+        main.removeCallbacks(hideControlsTask);
+        episodeOverlay = new FrameLayout(getContext());
+        episodeOverlay.setBackgroundColor(0x55000000);
+        episodeOverlay.setOnClickListener(v -> closeEpisodes());
+        LinearLayout panel = new LinearLayout(getContext());
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(12), dp(12), dp(12), dp(12));
+        panel.setBackgroundColor(0xF51B211E);
+        panel.setClickable(true);
+        TextView heading = label(16);
+        heading.setText("选集 · 关闭");
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.setOnClickListener(v -> closeEpisodes());
+        panel.addView(heading, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(44)));
+        ListView list = new ListView(getContext());
+        list.setDividerHeight(dp(4));
+        list.setAdapter(new ArrayAdapter<String>(getContext(), android.R.layout.simple_list_item_1, episodeLabels) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView row = (TextView) super.getView(position, convertView, parent);
+                row.setTextColor(position == episodeIndex ? Color.parseColor("#B6E6C7") : Color.WHITE);
+                row.setBackground(pill(position == episodeIndex ? 0xFF354C3E : 0x00000000, dp(10)));
+                row.setTextSize(14);
+                row.setMinHeight(dp(48));
+                row.setSelected(position == episodeIndex);
+                return row;
+            }
+        });
+        list.setOnItemClickListener((parent, view, index, id) -> {
+            closeEpisodes();
+            if (index != episodeIndex) listener.onEpisodeRequested(index);
+        });
+        panel.addView(list, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
+        int width = Math.min(dp(340), Math.max(dp(220), getWidth() / 2));
+        episodeOverlay.addView(panel, new LayoutParams(width, LayoutParams.MATCH_PARENT, Gravity.END));
+        addView(episodeOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        list.setSelection(Math.max(0, episodeIndex));
+    }
     public void resetBrightness() {
         if (!(getContext() instanceof Activity)) return;
         android.view.Window window = ((Activity) getContext()).getWindow();
@@ -676,7 +758,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void hideControls() {
-        if (paused || userSeeking || loading) return;
+        if (paused || userSeeking || loading || episodeOverlay != null) return;
         controlsVisible = false;
         fade(topBar, false);
         fade(bottomBar, false);
@@ -721,6 +803,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     private void applyChrome() {
         nextButton.setVisibility(hasNext ? View.VISIBLE : View.GONE);
         titleView.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
+        episodesButton.setVisibility(fullscreen && episodeLabels.length > 0 ? View.VISIBLE : View.GONE);
         fullscreenButton.setImageResource(fullscreen ? R.drawable.mpv_ic_fullscreen_exit : R.drawable.mpv_ic_fullscreen);
         fullscreenButton.setContentDescription(fullscreen ? "退出全屏" : "全屏");
         int side = fullscreen ? dp(28) : dp(4);

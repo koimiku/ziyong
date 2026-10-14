@@ -74,6 +74,10 @@ export function createNativeVideo(frame, hooks = {}) {
       emit("ended");
     });
     add("next", () => hooks.onNext?.());
+    add("episode", (data) => {
+      const index = Number(data?.index);
+      if (Number.isInteger(index) && index >= 0) hooks.onEpisode?.(index);
+    });
     add("back", () => hooks.onBack?.());
     add("fullscreen", (data) => {
       fullscreen = Boolean(data?.value);
@@ -199,13 +203,15 @@ export function createNativeVideo(frame, hooks = {}) {
         position,
         title: info.title || "",
         hasNext: Boolean(info.hasNext),
+        episodes: info.episodes || [],
+        episodeIndex: info.episodeIndex || 0,
         rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
       });
       duration = Number(result?.duration) || NaN;
       emit("loadedmetadata");
     },
     setInfo(info = {}) {
-      api.setInfo({ title: info.title || "", hasNext: Boolean(info.hasNext) }).catch(() => {});
+      api.setInfo({ ...info, title: info.title || "", hasNext: Boolean(info.hasNext) }).catch(() => {});
     },
     stop,
   };

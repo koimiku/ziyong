@@ -368,6 +368,7 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     if (media.isNative) return;
     media = createNativeVideo(playerFrame, {
       onNext: playNextEpisode,
+      onEpisode: playEpisodeAt,
       onBack: () => document.querySelector("#playerBackButton")?.click(),
     });
   }
@@ -378,6 +379,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     return {
       title: [playlist?.matchName, episode?.label].filter(Boolean).join(" · "),
       hasNext: state.episodeIndex < episodes.length - 1,
+      episodes: episodes.map((entry) => String(entry.label)),
+      episodeIndex: state.episodeIndex,
     };
   }
 
@@ -394,7 +397,11 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   }
 
   function playNextEpisode() {
-    const nextIndex = state.episodeIndex + 1;
+    playEpisodeAt(state.episodeIndex + 1);
+  }
+
+  function playEpisodeAt(nextIndex) {
+    if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex === state.episodeIndex) return;
     if (nextIndex >= episodes.length) return;
     const lineIndex = currentSourceRef()?.lineIndex;
     const sameLine = (episodes[nextIndex]?.sources || []).findIndex((source) => source.lineIndex === lineIndex);
@@ -424,6 +431,8 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
     playerFrame.classList.remove("is-failed", "needs-verify");
     await prepareMedia();
     if (requestId !== state.requestId) return;
+
+    if (media.isNative) media.setInfo({ ...nativeInfo(), loading: true });
 
     const candidates = context.singleSource
       ? buildPlayCandidates(true)
@@ -523,6 +532,9 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
   }
 
   function selectEpisode(nextEpisodeIndex, nextSourceIndex = 0) {
+    if (!episodes[nextEpisodeIndex]) return;
+    saveProgress(true);
+    stopProgressTracking();
     state.episodeIndex = nextEpisodeIndex;
     state.sourceIndex = nextSourceIndex;
     state.resumePosition = 0;

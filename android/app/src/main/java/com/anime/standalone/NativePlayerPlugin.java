@@ -49,6 +49,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     private boolean visible = true;
     private boolean fullscreen;
     private ValueAnimator animator;
+    private Runnable cancelFullscreenLayout;
     private int savedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
     private long lastProgressAt;
     private boolean lastPaused = true;
@@ -89,6 +90,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
             if (!fullscreen) applyBounds(inlineRect);
             player.setTitle(title);
             player.setHasNext(hasNext);
+            player.setEpisodes(call.getArray("episodes"), call.getInt("episodeIndex", 0));
 
             String userAgent = header(headers, "User-Agent");
             String referer = header(headers, "Referer");
@@ -171,6 +173,8 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
             if (player != null) {
                 if (title != null) player.setTitle(title);
                 if (hasNext != null) player.setHasNext(hasNext);
+                if (call.getArray("episodes") != null) player.setEpisodes(call.getArray("episodes"), call.getInt("episodeIndex", 0));
+                if (Boolean.TRUE.equals(call.getBoolean("loading", false))) player.prepareEpisode();
             }
             call.resolve();
         });
@@ -203,6 +207,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
 
     @Override
     protected void handleOnDestroy() {
+        if (cancelFullscreenLayout != null) cancelFullscreenLayout.run();
         main.removeCallbacksAndMessages(null);
         if (player != null) {
             player.release();
@@ -248,6 +253,13 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     @Override
     public void onNextRequested() {
         notifyListeners("next", new JSObject());
+    }
+
+    @Override
+    public void onEpisodeRequested(int index) {
+        JSObject data = new JSObject();
+        data.put("index", index);
+        notifyListeners("episode", data);
     }
 
     @Override
@@ -326,42 +338,49 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         if (fullscreen || player == null || !active) return;
         Activity activity = getActivity();
         Window window = activity.getWindow();
-        FrameLayout content = content();
-        int[] before = new int[2];
-        content.getLocationOnScreen(before);
-        Rect from = currentBounds();
-        from.offset(before[0], before[1]);
-
+        FrameLayout root = content();
+        if (animator != null) animator.cancel();
         fullscreen = true;
         savedOrientation = activity.getRequestedOrientation();
-        player.setFullscreen(true);
-        player.bringToFront();
-        updateVisibility();
         notifyFullscreen(true);
-
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        WindowCompat.setDecorFitsSystemWindows(window, false);
-        setCutoutMode(window, true);
-        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
-        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-        controller.hide(WindowInsetsCompat.Type.systemBars());
 
-        afterLayout(content, 300, () -> {
-            if (!fullscreen || player == null) return;
-            int[] after = new int[2];
-            content.getLocationOnScreen(after);
-            from.offset(-after[0], -after[1]);
-            applyBounds(from);
-            animateBounds(from, new Rect(0, 0, content.getWidth(), content.getHeight()), () -> {
-                if (!fullscreen) return;
-                fillContent();
-                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-            });
-        });
+        // Keep the inline video intact until the first landscape layout. Commit
+        // fullscreen before that layout is drawn, without a portrait expansion.
+        ViewTreeObserver.OnPreDrawListener[] listener = new ViewTreeObserver.OnPreDrawListener[1];
+        Runnable timeout = () -> {
+            if (fullscreen && cancelFullscreenLayout != null) exitFullscreen(false);
+        };
+        cancelFullscreenLayout = () -> {
+            if (root.getViewTreeObserver().isAlive()) {
+                root.getViewTreeObserver().removeOnPreDrawListener(listener[0]);
+            }
+            main.removeCallbacks(timeout);
+            cancelFullscreenLayout = null;
+        };
+        listener[0] = () -> {
+            if (!fullscreen || player == null) return true;
+            if (root.getWidth() <= root.getHeight()) return true;
+            cancelFullscreenLayout.run();
+            WindowCompat.setDecorFitsSystemWindows(window, false);
+            setCutoutMode(window, true);
+            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
+            controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            controller.hide(WindowInsetsCompat.Type.systemBars());
+            player.setFullscreen(true);
+            player.bringToFront();
+            fillContent();
+            updateVisibility();
+            return false; // Draw once the fullscreen bounds have been measured.
+        };
+        root.getViewTreeObserver().addOnPreDrawListener(listener[0]);
+        main.postDelayed(timeout, 2000);
+        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        root.requestLayout();
     }
-
     private void exitFullscreen(boolean animate) {
         if (!fullscreen) return;
+        if (cancelFullscreenLayout != null) cancelFullscreenLayout.run();
         fullscreen = false;
         Activity activity = getActivity();
         Window window = activity.getWindow();
