@@ -122,7 +122,7 @@ class LibraryBackup {
   String encode() => const JsonEncoder.withIndent('  ').convert({
     'format': 'anime-backup',
     'schema': 1,
-    'appVersion': '1.6.1',
+    'appVersion': '1.6.2',
     'createdAt': DateTime.now().toUtc().toIso8601String(),
     'collection': collection,
     'history': history,
