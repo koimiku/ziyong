@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'rule_engine.dart';
@@ -110,62 +109,4 @@ class MediaProbe {
     }
     // resolve owns disposal, including cancellation while run is pending.
   }
-}
-
-class SiteBrowserPage extends StatefulWidget {
-  const SiteBrowserPage({super.key, required this.challenge});
-  final SiteVerification challenge;
-  @override
-  State<SiteBrowserPage> createState() => _SiteBrowserPageState();
-}
-
-class _SiteBrowserPageState extends State<SiteBrowserPage> {
-  late final Future<WebViewEnvironment?> environment = prepareSiteBrowser();
-  double progress = 0;
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text('网站验证 · ${widget.challenge.rule.name}'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('完成并重试'),
-        ),
-      ],
-    ),
-    body: FutureBuilder<WebViewEnvironment?>(
-      future: environment,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Center(child: Text('无法打开网站，请确认已安装系统 WebView 组件'));
-        }
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return Column(
-          children: [
-            if (progress < 1) LinearProgressIndicator(value: progress),
-            Expanded(
-              child: InAppWebView(
-                webViewEnvironment: snapshot.data,
-                initialUrlRequest: URLRequest(
-                  url: WebUri(widget.challenge.url),
-                  headers: widget.challenge.rule.headers(widget.challenge.url),
-                ),
-                initialSettings: InAppWebViewSettings(
-                  userAgent: widget.challenge.rule.headers(
-                    widget.challenge.url,
-                  )['User-Agent'],
-                  supportMultipleWindows: false,
-                ),
-                onProgressChanged: (_, value) {
-                  if (mounted) setState(() => progress = value / 100);
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    ),
-  );
 }

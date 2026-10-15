@@ -14,6 +14,19 @@ void main() {
   });
   tearDown(() => store.close());
   test(
+    'fullscreen control preference persists and survives backup roundtrip',
+    () async {
+      const key = 'anime-player-auto-hide-fullscreen';
+      await store.setSetting(key, 'true');
+      final saved = await store.read();
+      expect(saved.settings[key], 'true');
+      final restored = LibraryBackup.decode(saved.encode());
+      expect(restored.settings[key], 'true');
+      await store.setSetting(key, 'false');
+      expect((await store.read()).settings[key], 'false');
+    },
+  );
+  test(
     'default rules seed only once and never replace imported rules',
     () async {
       const rule = {'name': 'default'};

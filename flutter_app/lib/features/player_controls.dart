@@ -3,6 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 const playerControlsTimeout = Duration(seconds: 8);
+Duration? controlsTimeout({
+  required bool fullscreen,
+  bool autoHideFullscreen = false,
+}) => fullscreen
+    ? (autoHideFullscreen ? const Duration(seconds: 15) : null)
+    : playerControlsTimeout;
 
 class PlayerControls extends StatefulWidget {
   const PlayerControls({

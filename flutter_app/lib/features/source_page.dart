@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../app_controller.dart';
 import '../domain/library_backup.dart';
 import '../rules/rule_engine.dart';
-import '../rules/site_browser.dart';
+import '../rules/verification_dialog.dart';
 import '../rules/site_client.dart';
 import 'watch_page.dart';
 import 'service_pages.dart';
@@ -125,13 +125,8 @@ class _SourcePageState extends State<SourcePage> {
     );
   }
 
-  Future<void> verify(SiteVerification challenge) async {
-    final done = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => SiteBrowserPage(challenge: challenge)),
-    );
-    if (done == true && mounted) unawaited(search());
-  }
+  Future<bool> verify(SiteVerification challenge) =>
+      showSiteVerification(context, challenge);
 
   Future<void> open(SourceHit hit) async {
     final current = ++openingGeneration;
@@ -154,7 +149,13 @@ class _SourcePageState extends State<SourcePage> {
         ),
       );
     } on SiteVerification catch (challenge) {
-      if (mounted && current == openingGeneration) await verify(challenge);
+      if (mounted &&
+          current == openingGeneration &&
+          await verify(challenge) &&
+          mounted &&
+          current == openingGeneration) {
+        await open(hit);
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -265,9 +266,12 @@ class _SourcePageState extends State<SourcePage> {
                         ),
                         trailing: errors[rule.name] is SiteVerification
                             ? TextButton(
-                                onPressed: () => verify(
-                                  errors[rule.name] as SiteVerification,
-                                ),
+                                onPressed: () async {
+                                  final done = await verify(
+                                    errors[rule.name] as SiteVerification,
+                                  );
+                                  if (done && mounted) unawaited(search());
+                                },
                                 child: const Text('验证'),
                               )
                             : null,

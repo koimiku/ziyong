@@ -1,8 +1,8 @@
 {
-  "version": "1.6.2",
-  "name": "v1.6.2",
-  "notes": "恢复每日更新与星期切换、片源检测和一键安装；明确规则安装与更新状态；优化全屏触控、控制栏停留和深色播放器界面；移除设置中的开源许可入口。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.2",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.2/app-release.apk",
-  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.2/anime-1.6.2-windows-x64.zip"
+  "version": "1.6.3",
+  "name": "v1.6.3",
+  "notes": "恢复软件内验证码输入弹窗，验证后继续原操作；全屏控制栏默认保持显示，点击空白处隐藏，可选 15 秒自动收起。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.3",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.3/app-release.apk",
+  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.3/anime-1.6.3-windows-x64.zip"
 }

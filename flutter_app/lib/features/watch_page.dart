@@ -21,6 +21,7 @@ import '../app_controller.dart';
 import '../domain/library_backup.dart';
 import '../rules/rule_engine.dart';
 import '../rules/site_browser.dart';
+import '../rules/verification_dialog.dart';
 import '../rules/site_client.dart';
 
 class WatchPage extends StatefulWidget {
@@ -292,7 +293,17 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     hideTimer?.cancel();
     if (mounted && !visible) setState(() => visible = true);
     if (!playing || loading) return;
-    hideTimer = Timer(playerControlsTimeout, () {
+    final timeout = controlsTimeout(
+      fullscreen: full,
+      autoHideFullscreen:
+          widget
+              .controller
+              .library
+              .settings['anime-player-auto-hide-fullscreen'] ==
+          'true',
+    );
+    if (timeout == null) return;
+    hideTimer = Timer(timeout, () {
       if (mounted && playing && !loading) setState(() => visible = false);
     });
   }
@@ -418,6 +429,24 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                 Text(
                   '播放设置',
                   style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('自动隐藏全屏控制栏'),
+                  subtitle: const Text('默认保持显示；开启后 15 秒自动收起'),
+                  value:
+                      widget
+                          .controller
+                          .library
+                          .settings['anime-player-auto-hide-fullscreen'] ==
+                      'true',
+                  onChanged: (value) async {
+                    await widget.controller.setSetting(
+                      'anime-player-auto-hide-fullscreen',
+                      '$value',
+                    );
+                    if (mounted && sheetContext.mounted) update(() {});
+                  },
                 ),
                 const SizedBox(height: 20),
                 const Text('倍速'),
@@ -905,14 +934,9 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                           if (verification
                                               case final challenge?) {
                                             final ok =
-                                                await Navigator.push<bool>(
+                                                await showSiteVerification(
                                                   context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        SiteBrowserPage(
-                                                          challenge: challenge,
-                                                        ),
-                                                  ),
+                                                  challenge,
                                                 );
                                             if (ok != true || !mounted) return;
                                           }
