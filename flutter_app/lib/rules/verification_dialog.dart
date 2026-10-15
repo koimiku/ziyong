@@ -15,6 +15,23 @@ bool isVerificationWebUrl(String? value) {
       {'http', 'https'}.contains(uri.scheme);
 }
 
+class VerificationDismissGuard extends StatelessWidget {
+  const VerificationDismissGuard({
+    super.key,
+    required this.onClosed,
+    required this.child,
+  });
+  final VoidCallback onClosed;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => PopScope(
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) onClosed();
+    },
+    child: child,
+  );
+}
+
 Future<bool> showSiteVerification(
   BuildContext context,
   SiteVerification challenge, {
@@ -284,176 +301,189 @@ class _VerificationDialogState extends State<_VerificationDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
-        child: Row(
-          children: [
-            const Icon(Icons.verified_user_outlined),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('网站验证', style: Theme.of(context).textTheme.titleMedium),
-                  Text(
-                    widget.challenge.rule.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: '关闭验证',
-              onPressed: () => Navigator.pop(context, false),
-              icon: const Icon(Icons.close_rounded),
-            ),
-          ],
-        ),
-      ),
-      if (loading)
-        LinearProgressIndicator(value: progress > 0 ? progress : null),
-      Expanded(
-        child: FutureBuilder<WebViewEnvironment?>(
-          future: environment,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('无法打开验证组件，请检查系统 WebView 是否可用'),
-                ),
-              );
-            }
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    ignoring: !website,
-                    child: Opacity(
-                      opacity: website ? 1 : 0,
-                      child: InAppWebView(
-                        webViewEnvironment: snapshot.data,
-                        initialUrlRequest: URLRequest(
-                          url: WebUri(widget.challenge.url),
-                          headers: widget.challenge.rule.headers(
-                            widget.challenge.url,
-                          ),
-                        ),
-                        initialSettings: InAppWebViewSettings(
-                          userAgent: widget.challenge.rule.headers(
-                            widget.challenge.url,
-                          )['User-Agent'],
-                          javaScriptEnabled: true,
-                          mediaPlaybackRequiresUserGesture: true,
-                          supportMultipleWindows: true,
-                          javaScriptCanOpenWindowsAutomatically: false,
-                          useShouldOverrideUrlLoading: true,
-                        ),
-                        onWebViewCreated: (controller) => browser = controller,
-                        onLoadStart: (_, url) {
-                          generation++;
-                          if (mounted) {
-                            setState(() {
-                              loading = true;
-                              failed = false;
-                            });
-                          }
-                        },
-                        onReceivedError: (_, request, error) {
-                          if (request.isForMainFrame == true && mounted) {
-                            generation++;
-                            timer?.cancel();
-                            setState(() {
-                              loading = false;
-                              failed = true;
-                              captcha.message = '验证页面加载失败，请刷新后重试';
-                            });
-                          }
-                        },
-                        onLoadStop: (_, url) {
-                          if (mounted) {
-                            setState(() => loading = false);
-                            begin();
-                          }
-                        },
-                        onProgressChanged: (_, value) {
-                          if (mounted) setState(() => progress = value / 100);
-                        },
-                        shouldOverrideUrlLoading: (_, action) async =>
-                            isVerificationWebUrl(action.request.url?.toString())
-                            ? NavigationActionPolicy.ALLOW
-                            : NavigationActionPolicy.CANCEL,
-                        onCreateWindow: (controller, action) async {
-                          if (isVerificationWebUrl(
-                            action.request.url?.toString(),
-                          )) {
-                            await controller.loadUrl(
-                              urlRequest: action.request,
-                            );
-                          }
-                          return false;
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                if (!website)
-                  Positioned.fill(
-                    child: ColoredBox(
-                      color: Theme.of(context).colorScheme.surface,
-                      child: CaptchaPrompt(
-                        image: captcha.image,
-                        answer: answer,
-                        message: captcha.message,
-                        submitting: captcha.submitted,
-                        onSubmit: submit,
-                        onRefresh: refresh,
-                        onWebsite: () {
-                          FocusManager.instance.primaryFocus?.unfocus();
-                          setState(() => website = true);
-                        },
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
-      if (website)
+  Widget build(BuildContext context) => VerificationDismissGuard(
+    onClosed: () {
+      finished = true;
+      generation++;
+      timer?.cancel();
+    },
+    child: Column(
+      children: [
         Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+          child: Row(
             children: [
-              if (captcha.message.isNotEmpty)
-                Text(
-                  captcha.message,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              const Icon(Icons.verified_user_outlined),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '网站验证',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      widget.challenge.rule.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () => setState(() => website = false),
-                    child: const Text('返回验证码'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('完成后重试'),
-                  ),
-                ],
+              ),
+              IconButton(
+                tooltip: '关闭验证',
+                onPressed: () => Navigator.pop(context, false),
+                icon: const Icon(Icons.close_rounded),
               ),
             ],
           ),
         ),
-    ],
+        if (loading)
+          LinearProgressIndicator(value: progress > 0 ? progress : null),
+        Expanded(
+          child: FutureBuilder<WebViewEnvironment?>(
+            future: environment,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('无法打开验证组件，请检查系统 WebView 是否可用'),
+                  ),
+                );
+              }
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: !website,
+                      child: Opacity(
+                        opacity: website ? 1 : 0,
+                        child: InAppWebView(
+                          webViewEnvironment: snapshot.data,
+                          initialUrlRequest: URLRequest(
+                            url: WebUri(widget.challenge.url),
+                            headers: widget.challenge.rule.headers(
+                              widget.challenge.url,
+                            ),
+                          ),
+                          initialSettings: InAppWebViewSettings(
+                            userAgent: widget.challenge.rule.headers(
+                              widget.challenge.url,
+                            )['User-Agent'],
+                            javaScriptEnabled: true,
+                            mediaPlaybackRequiresUserGesture: true,
+                            supportMultipleWindows: true,
+                            javaScriptCanOpenWindowsAutomatically: false,
+                            useShouldOverrideUrlLoading: true,
+                          ),
+                          onWebViewCreated: (controller) =>
+                              browser = controller,
+                          onLoadStart: (_, url) {
+                            generation++;
+                            if (mounted) {
+                              setState(() {
+                                loading = true;
+                                failed = false;
+                              });
+                            }
+                          },
+                          onReceivedError: (_, request, error) {
+                            if (request.isForMainFrame == true && mounted) {
+                              generation++;
+                              timer?.cancel();
+                              setState(() {
+                                loading = false;
+                                failed = true;
+                                captcha.message = '验证页面加载失败，请刷新后重试';
+                              });
+                            }
+                          },
+                          onLoadStop: (_, url) {
+                            if (mounted) {
+                              setState(() => loading = false);
+                              begin();
+                            }
+                          },
+                          onProgressChanged: (_, value) {
+                            if (mounted) setState(() => progress = value / 100);
+                          },
+                          shouldOverrideUrlLoading: (_, action) async =>
+                              isVerificationWebUrl(
+                                action.request.url?.toString(),
+                              )
+                              ? NavigationActionPolicy.ALLOW
+                              : NavigationActionPolicy.CANCEL,
+                          onCreateWindow: (controller, action) async {
+                            if (isVerificationWebUrl(
+                              action.request.url?.toString(),
+                            )) {
+                              await controller.loadUrl(
+                                urlRequest: action.request,
+                              );
+                            }
+                            return false;
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (!website)
+                    Positioned.fill(
+                      child: ColoredBox(
+                        color: Theme.of(context).colorScheme.surface,
+                        child: CaptchaPrompt(
+                          image: captcha.image,
+                          answer: answer,
+                          message: captcha.message,
+                          submitting: captcha.submitted,
+                          onSubmit: submit,
+                          onRefresh: refresh,
+                          onWebsite: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            setState(() => website = true);
+                          },
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        if (website)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (captcha.message.isNotEmpty)
+                  Text(
+                    captcha.message,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => setState(() => website = false),
+                      child: const Text('返回验证码'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('完成后重试'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
   );
 }

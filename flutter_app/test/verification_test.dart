@@ -90,7 +90,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final answer = TextEditingController();
-        var retries = 0, openings = 0;
+        var retries = 0, openings = 0, closed = 0;
         final challenge = SiteVerification(
           SourceRule({
             'name': 'test',
@@ -117,24 +117,32 @@ void main() {
                         final done = await showSiteVerification(
                           context,
                           challenge,
-                          contentBuilder: (context) => Column(
-                            children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('关闭验证'),
-                              ),
-                              Expanded(
-                                child: CaptchaPrompt(
-                                  image: base64Decode(image),
-                                  answer: answer,
-                                  message: '',
-                                  submitting: false,
-                                  onSubmit: () => Navigator.pop(context, true),
-                                  onRefresh: () {},
-                                  onWebsite: () {},
+                          contentBuilder: (context) => VerificationDismissGuard(
+                            onClosed: () => closed++,
+                            child: Column(
+                              children: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('关闭验证'),
                                 ),
-                              ),
-                            ],
+                                Expanded(
+                                  child: CaptchaPrompt(
+                                    image: base64Decode(image),
+                                    answer: answer,
+                                    message: '',
+                                    submitting: false,
+                                    onSubmit: () {
+                                      final before = closed;
+                                      Navigator.pop(context, true);
+                                      expect(closed, before + 1);
+                                    },
+                                    onRefresh: () {},
+                                    onWebsite: () {},
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                         if (done) retries++;
@@ -155,6 +163,7 @@ void main() {
         await tester.tap(find.text('关闭验证'));
         await tester.pumpAndSettle();
         expect(retries, 0);
+        expect(closed, 1);
         await tester.tap(find.text('打开验证'));
         await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
@@ -175,6 +184,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(retries, 1);
         expect(openings, 2);
+        expect(closed, 2);
         expect(find.text('保留当前播放页'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
