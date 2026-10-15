@@ -18,10 +18,12 @@ void main() {
     () async {
       const key = 'anime-player-auto-hide-fullscreen';
       await store.setSetting(key, 'true');
+      await store.setSetting('anime-player-decoder', 'software');
       final saved = await store.read();
       expect(saved.settings[key], 'true');
       final restored = LibraryBackup.decode(saved.encode());
       expect(restored.settings[key], 'true');
+      expect(restored.settings['anime-player-decoder'], 'software');
       await store.setSetting(key, 'false');
       expect((await store.read()).settings[key], 'false');
     },

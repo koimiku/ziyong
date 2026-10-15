@@ -13,7 +13,10 @@ void main() {
     required Size size,
     required bool full,
     bool visible = true,
+    bool failed = false,
     VoidCallback? onFullscreen,
+    VoidCallback? onEpisodes,
+    VoidCallback? onHide,
     ValueChanged<Duration>? onSeek,
   }) async {
     tester.view.physicalSize = size;
@@ -58,6 +61,7 @@ void main() {
                 visible: visible,
                 playing: true,
                 loading: false,
+                failed: failed,
                 position: const Duration(minutes: 4, seconds: 32),
                 duration: const Duration(minutes: 24),
                 title: '属于今天的故事',
@@ -65,12 +69,14 @@ void main() {
                 rate: 1,
                 onPlay: () {},
                 onFullscreen: onFullscreen ?? () {},
-                onEpisodes: () {},
+                onEpisodes: onEpisodes ?? () {},
                 onSettings: () {},
                 onSkip: () {},
                 onSeek: onSeek ?? (_) {},
                 onSeekStart: () {},
                 onActivity: () {},
+                onHide: onHide ?? () {},
+                onNext: () {},
               ),
             ),
           ),
@@ -97,6 +103,36 @@ void main() {
       expect(taps, 1);
       expect(tester.takeException(), isNull);
       expect(playerControlsTimeout.inSeconds, greaterThanOrEqualTo(8));
+    },
+  );
+  testWidgets(
+    'failed media retains episode and exit actions and explicit hide',
+    (tester) async {
+      var exits = 0, episodes = 0, hides = 0;
+      await mount(
+        tester,
+        size: const Size(568, 320),
+        full: true,
+        failed: true,
+        onFullscreen: () => exits++,
+        onEpisodes: () => episodes++,
+        onHide: () => hides++,
+      );
+      await tester.tap(find.text('选集'));
+      expect(episodes, 1);
+      await tester.tap(find.widgetWithText(TextButton, '退出全屏'));
+      expect(exits, 1);
+      await tester.tap(find.byTooltip('收起控制栏'));
+      expect(hides, 1);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.pause_rounded),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
   for (final size in [

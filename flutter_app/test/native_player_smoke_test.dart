@@ -33,6 +33,11 @@ void main() {
       final file = await File('${directory.path}/silent.wav')
           .writeAsBytes(bytes);
       await player.setVolume(0);
+      final native = player.platform as NativePlayer;
+      await native.setProperty('hwdec', 'auto-safe');
+      expect(await native.getProperty('hwdec'), 'auto-safe');
+      await native.setProperty('hwdec', 'no');
+      expect(await native.getProperty('hwdec'), 'no');
       final duration = player.stream.duration
           .firstWhere((value) => value.inSeconds >= 2)
           .timeout(const Duration(seconds: 10));

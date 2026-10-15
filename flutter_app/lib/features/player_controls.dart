@@ -30,8 +30,15 @@ class PlayerControls extends StatefulWidget {
     required this.onSeek,
     required this.onSeekStart,
     required this.onActivity,
+    this.onHide,
+    this.onNext,
+    this.failed = false,
+    this.buffer = Duration.zero,
   });
   final bool full, visible, playing, loading;
+  final bool failed;
+  final Duration buffer;
+  final VoidCallback? onHide, onNext;
   final Duration position, duration;
   final String title, subtitle;
   final double rate;
@@ -51,17 +58,25 @@ class _PlayerControlsState extends State<PlayerControls> {
   double? scrub;
   String clock(Duration value) =>
       '${value.inMinutes.toString().padLeft(2, '0')}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
-  Widget icon(IconData icon, String label, VoidCallback callback) => IconButton(
-    tooltip: label,
-    constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
-    color: Colors.white,
-    iconSize: 26,
-    onPressed: () {
-      widget.onActivity();
-      callback();
-    },
-    icon: Icon(icon),
+  Widget region(Widget child) => ControlHitRegion(
+    onStart: widget.onSeekStart,
+    onEnd: widget.onActivity,
+    child: child,
   );
+  Widget icon(IconData icon, String label, VoidCallback? callback) =>
+      IconButton(
+        tooltip: label,
+        constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
+        color: Colors.white,
+        iconSize: 26,
+        onPressed: callback == null
+            ? null
+            : () {
+                widget.onActivity();
+                callback();
+              },
+        icon: Icon(icon),
+      );
   Widget fullButton() => TextButton.icon(
     style: TextButton.styleFrom(
       foregroundColor: Colors.white,
@@ -142,194 +157,198 @@ class _PlayerControlsState extends State<PlayerControls> {
                     top: widget.full ? 10 : 0,
                     left: widget.full ? 12 : 12,
                     right: 12,
-                    child: Row(
-                      children: [
-                        if (widget.full)
-                          icon(
-                            Icons.arrow_back_rounded,
-                            '退出全屏',
-                            widget.onFullscreen,
-                          ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.full ? widget.title : widget.subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: widget.full ? 16 : 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              if (widget.full)
+                    child: region(
+                      Row(
+                        children: [
+                          if (widget.full)
+                            icon(
+                              Icons.arrow_back_rounded,
+                              '退出全屏',
+                              widget.onFullscreen,
+                            ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 Text(
-                                  widget.subtitle,
+                                  widget.full ? widget.title : widget.subtitle,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    height: 1.7,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        if (widget.full)
-                          IconButton(
-                            tooltip: '快进85秒',
-                            constraints: const BoxConstraints(
-                              minWidth: 52,
-                              minHeight: 52,
-                            ),
-                            onPressed: () {
-                              widget.onActivity();
-                              widget.onSkip();
-                            },
-                            icon: const Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                CustomPaint(
-                                  size: Size(36, 36),
-                                  painter: _SkipArrowPainter(),
-                                ),
-                                Text(
-                                  '+85',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: widget.full ? 16 : 13,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                                if (widget.full)
+                                  Text(
+                                    widget.subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                      height: 1.7,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                        icon(Icons.tune_rounded, '播放设置', widget.onSettings),
-                      ],
-                    ),
-                  ),
-                  if (widget.full && !widget.loading)
-                    Center(
-                      child: IconButton.filled(
-                        tooltip: widget.playing ? '暂停' : '播放',
-                        style: IconButton.styleFrom(
-                          backgroundColor: const Color(0x502b3039),
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(72, 72),
-                        ),
-                        iconSize: 44,
-                        onPressed: () {
-                          widget.onActivity();
-                          widget.onPlay();
-                        },
-                        icon: Icon(
-                          widget.playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                        ),
+                          if (widget.full)
+                            IconButton(
+                              tooltip: '快进85秒',
+                              constraints: const BoxConstraints(
+                                minWidth: 52,
+                                minHeight: 52,
+                              ),
+                              onPressed: widget.failed || widget.loading
+                                  ? null
+                                  : () {
+                                      widget.onActivity();
+                                      widget.onSkip();
+                                    },
+                              icon: const Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  CustomPaint(
+                                    size: Size(36, 36),
+                                    painter: _SkipArrowPainter(),
+                                  ),
+                                  Text(
+                                    '+85',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (widget.full && widget.onHide != null)
+                            icon(
+                              Icons.visibility_off_outlined,
+                              '收起控制栏',
+                              widget.onHide,
+                            ),
+                          icon(Icons.tune_rounded, '播放设置', widget.onSettings),
+                        ],
                       ),
                     ),
+                  ),
                   Positioned(
                     bottom: widget.full ? 10 : 0,
                     left: widget.full ? 24 : 8,
                     right: widget.full ? 24 : 8,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 3,
-                            activeTrackColor: accent,
-                            inactiveTrackColor: Colors.white24,
-                            thumbColor: accent,
-                            overlayColor: accent.withValues(alpha: .16),
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 6,
+                    child: region(
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              activeTrackColor: accent,
+                              inactiveTrackColor: Colors.white24,
+                              thumbColor: accent,
+                              overlayColor: accent.withValues(alpha: .16),
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                              trackShape: const RoundedRectSliderTrackShape(),
                             ),
-                            trackShape: const RoundedRectSliderTrackShape(),
+                            child: Slider(
+                              value: value,
+                              max: end > 0 ? end : 1,
+                              secondaryTrackValue: widget.buffer.inMilliseconds
+                                  .toDouble()
+                                  .clamp(value, end > 0 ? end : 1),
+                              onChangeStart:
+                                  widget.loading || widget.failed || end <= 0
+                                  ? null
+                                  : (value) {
+                                      widget.onSeekStart();
+                                      setState(() => scrub = value);
+                                    },
+                              onChanged:
+                                  widget.loading || widget.failed || end <= 0
+                                  ? null
+                                  : (value) => setState(() => scrub = value),
+                              onChangeEnd:
+                                  widget.loading || widget.failed || end <= 0
+                                  ? null
+                                  : (value) {
+                                      widget.onSeek(
+                                        Duration(milliseconds: value.toInt()),
+                                      );
+                                      setState(() => scrub = null);
+                                      widget.onActivity();
+                                    },
+                            ),
                           ),
-                          child: Slider(
-                            value: value,
-                            max: end > 0 ? end : 1,
-                            onChangeStart: widget.loading || end <= 0
-                                ? null
-                                : (value) {
-                                    widget.onSeekStart();
-                                    setState(() => scrub = value);
-                                  },
-                            onChanged: widget.loading || end <= 0
-                                ? null
-                                : (value) => setState(() => scrub = value),
-                            onChangeEnd: widget.loading || end <= 0
-                                ? null
-                                : (value) {
-                                    widget.onSeek(
-                                      Duration(milliseconds: value.toInt()),
-                                    );
-                                    setState(() => scrub = null);
-                                    widget.onActivity();
-                                  },
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            if (!widget.full)
+                          Row(
+                            children: [
                               icon(
                                 widget.playing
                                     ? Icons.pause_rounded
                                     : Icons.play_arrow_rounded,
                                 widget.playing ? '暂停' : '播放',
-                                widget.onPlay,
+                                widget.failed || widget.loading
+                                    ? null
+                                    : widget.onPlay,
                               ),
-                            Expanded(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '${clock(Duration(milliseconds: value.toInt()))} / ${clock(widget.duration)}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontFeatures: [
-                                      FontFeature.tabularFigures(),
-                                    ],
+                              if (widget.full)
+                                icon(
+                                  Icons.skip_next_rounded,
+                                  '下一集',
+                                  widget.onNext,
+                                ),
+                              Expanded(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '${clock(Duration(milliseconds: value.toInt()))} / ${clock(widget.duration)}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            if (widget.full) ...[
-                              TextButton(
-                                onPressed: () {
-                                  widget.onActivity();
-                                  widget.onSettings();
-                                },
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  minimumSize: const Size(56, 52),
+                              if (widget.full) ...[
+                                TextButton(
+                                  onPressed: () {
+                                    widget.onActivity();
+                                    widget.onSettings();
+                                  },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(56, 52),
+                                  ),
+                                  child: Text('${widget.rate}×'),
                                 ),
-                                child: Text('${widget.rate}×'),
-                              ),
-                              TextButton.icon(
-                                onPressed: () {
-                                  widget.onActivity();
-                                  widget.onEpisodes();
-                                },
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  minimumSize: const Size(84, 52),
+                                TextButton.icon(
+                                  onPressed: () {
+                                    widget.onActivity();
+                                    widget.onEpisodes();
+                                  },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(84, 52),
+                                  ),
+                                  icon: const Icon(Icons.playlist_play_rounded),
+                                  label: const Text('选集'),
                                 ),
-                                icon: const Icon(Icons.playlist_play_rounded),
-                                label: const Text('选集'),
-                              ),
+                              ],
+                              fullButton(),
                             ],
-                            fullButton(),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -367,4 +386,23 @@ class _SkipArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SkipArrowPainter oldDelegate) => false;
+}
+
+class ControlHitRegion extends StatelessWidget {
+  const ControlHitRegion({
+    super.key,
+    required this.onStart,
+    required this.onEnd,
+    required this.child,
+  });
+  final VoidCallback onStart, onEnd;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.opaque,
+    onPointerDown: (_) => onStart(),
+    onPointerUp: (_) => onEnd(),
+    onPointerCancel: (_) => onEnd(),
+    child: child,
+  );
 }

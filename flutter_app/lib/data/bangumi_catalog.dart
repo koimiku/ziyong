@@ -11,7 +11,7 @@ class BangumiCatalog {
   Future<List<JsonMap>>? _calendar;
   DateTime? _calendarLoadedAt;
   static const _headers = {
-    'User-Agent': 'ziyong/1.6.4 (https://github.com/koimiku/ziyong)',
+    'User-Agent': 'ziyong/1.6.5 (https://github.com/koimiku/ziyong)',
     'Accept': 'application/json',
   };
 

@@ -9,6 +9,7 @@ const backupSettings = {
   'anime-startup',
   'anime-auto-health',
   'anime-player-auto-hide-fullscreen',
+  'anime-player-decoder',
   'anime-search-recent',
 };
 const collectionLabels = {'planned': '想看', 'watching': '在看', 'completed': '看过'};
@@ -123,7 +124,7 @@ class LibraryBackup {
   String encode() => const JsonEncoder.withIndent('  ').convert({
     'format': 'anime-backup',
     'schema': 1,
-    'appVersion': '1.6.4',
+    'appVersion': '1.6.5',
     'createdAt': DateTime.now().toUtc().toIso8601String(),
     'collection': collection,
     'history': history,

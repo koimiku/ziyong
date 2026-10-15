@@ -15,7 +15,10 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../domain/playback_policy.dart';
+import '../domain/playback_recovery.dart';
+import '../data/app_update.dart';
 import 'player_controls.dart';
+import 'episode_panel.dart';
 
 import '../app_controller.dart';
 import '../domain/library_backup.dart';
@@ -43,6 +46,12 @@ class WatchPage extends StatefulWidget {
 class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
   late final Player player;
   late final VideoController video;
+  late final PlaybackRecovery recovery;
+  bool wantsPlayback = true, softwareDecoder = false, playbackError = false;
+  String? currentMediaUri, playbackNotice;
+  String lastPlayerMessage = "";
+  Map<String, String> currentMediaHeaders = {};
+  Duration buffered = Duration.zero;
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? hideTimer, saveTimer;
   SiteClient? client;
@@ -73,17 +82,53 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     MediaKit.ensureInitialized();
     player = Player();
+    softwareDecoder =
+        widget.controller.library.settings['anime-player-decoder'] ==
+        'software';
+    recovery = PlaybackRecovery(
+      recover: () => reopenMedia(software: true, fromRecovery: true),
+      wantsPlayback: () => wantsPlayback && active,
+      onNotice: (message) {
+        if (!mounted) return;
+        setState(() {
+          playbackNotice = message;
+          if (message == null && playbackError) {
+            error = null;
+            playbackError = false;
+          }
+        });
+        if (message != null) showControls();
+      },
+      onFailure: (message) {
+        if (!mounted) return;
+        setState(() {
+          error = message;
+          playbackError = true;
+          playbackNotice = null;
+          loading = false;
+        });
+        showControls();
+      },
+    );
     if (Platform.isAndroid) unawaited(prepareAudioSession());
     video = VideoController(
       player,
       configuration: VideoControllerConfiguration(
-        hwdec: Platform.isAndroid ? 'mediacodec,mediacodec-copy' : 'auto',
+        hwdec: softwareDecoder ? 'no' : null,
       ),
     );
     subscriptions.add(
       player.stream.position.listen((value) {
         final changed = value.inSeconds != position.inSeconds;
+        recovery.progress(value);
         position = value;
+        if (mounted && visible && changed) setState(() {});
+      }),
+    );
+    subscriptions.add(
+      player.stream.buffer.listen((value) {
+        final changed = value.inSeconds != buffered.inSeconds;
+        buffered = value;
         if (mounted && visible && changed) setState(() {});
       }),
     );
@@ -99,7 +144,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
         if (audioSession case final session?) {
           unawaited(
             session.setActive(value && active).then((allowed) {
-              if (value && !allowed && mounted) unawaited(player.pause());
+              if (value && !allowed && mounted) unawaited(pausePlayback());
             }),
           );
         }
@@ -118,12 +163,15 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     );
     subscriptions.add(
       player.stream.error.listen((value) {
-        if (mounted) setState(() => error = value);
+        lastPlayerMessage = value.replaceAll(RegExp(r'https?://\S+'), '[媒体地址]');
+        recovery.error(value);
       }),
     );
     subscriptions.add(
       player.stream.completed.listen((value) {
         if (value &&
+            !recovery.pending &&
+            error == null &&
             active &&
             episode + 1 < widget.lines[line].episodes.length) {
           unawaited(load(line, episode + 1));
@@ -140,6 +188,78 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     saveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (playing && active) unawaited(save());
     });
+  }
+
+  Future<void> configureDecoder(bool software) async {
+    await video.platform.future.timeout(const Duration(seconds: 15));
+    final native = player.platform;
+    if (native is NativePlayer) {
+      await native.setProperty(
+        'hwdec',
+        software
+            ? 'no'
+            : Platform.isAndroid
+            ? 'auto-safe'
+            : 'auto',
+      );
+    }
+  }
+
+  Future<void> pausePlayback() async {
+    wantsPlayback = false;
+    recovery.cancel();
+    await player.pause();
+  }
+
+  Future<void> togglePlayback() async {
+    if (playing) {
+      await pausePlayback();
+    } else {
+      wantsPlayback = true;
+      recovery.begin(software: softwareDecoder);
+      await player.play();
+    }
+    showControls();
+  }
+
+  Future<void> reopenMedia({
+    required bool software,
+    bool fromRecovery = false,
+  }) async {
+    final uri = currentMediaUri;
+    if (uri == null || !mounted) return;
+    final token = generation;
+    final resume = position;
+    final headers = Map<String, String>.from(currentMediaHeaders);
+    if (!fromRecovery) recovery.cancel();
+    setState(() {
+      softwareDecoder = software;
+      error = null;
+      playbackError = false;
+      loading = true;
+    });
+    try {
+      await configureDecoder(software);
+      if (!mounted || token != generation) return;
+      if (!fromRecovery) recovery.begin(software: software);
+      await player.open(
+        Media(uri, httpHeaders: headers, start: resume),
+        play: active && wantsPlayback,
+      );
+      if (!mounted || token != generation) return;
+      await player.setRate(rate);
+      if (!mounted || token != generation) return;
+      setState(() => loading = false);
+      showControls();
+    } catch (_) {
+      if (!mounted || token != generation) return;
+      if (fromRecovery) rethrow;
+      setState(() {
+        loading = false;
+        error = '无法切换当前媒体的解码方式，请换一条线路';
+      });
+      showControls();
+    }
   }
 
   Future<void> save() async {
@@ -174,12 +294,12 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
       audioSession = session;
       subscriptions.add(
         session.interruptionEventStream.listen((event) {
-          if (event.begin) unawaited(player.pause());
+          if (event.begin) unawaited(pausePlayback());
         }),
       );
       subscriptions.add(
         session.becomingNoisyEventStream.listen(
-          (_) => unawaited(player.pause()),
+          (_) => unawaited(pausePlayback()),
         ),
       );
       if (playing && active) await session.setActive(true);
@@ -192,6 +312,8 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     Duration resume = Duration.zero,
     bool forceBrowser = false,
   }) async {
+    recovery.cancel();
+    currentMediaUri = null;
     final token = ++generation;
     await save();
     if (!mounted || token != generation) return;
@@ -204,6 +326,13 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
       loading = true;
       error = null;
       verification = null;
+      playbackError = false;
+      playbackNotice = null;
+      buffered = Duration.zero;
+      softwareDecoder =
+          widget.controller.library.settings['anime-player-decoder'] ==
+          'software';
+      wantsPlayback = active;
       position = Duration.zero;
       duration = Duration.zero;
       visible = true;
@@ -236,12 +365,17 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
         current.url,
       );
       if (!mounted || token != generation) return;
+      currentMediaUri = url;
+      currentMediaHeaders = {
+        ...?resolved?.headers,
+        ...headers,
+        ...capturedHeaders,
+      };
+      await configureDecoder(softwareDecoder);
+      if (!mounted || token != generation) return;
+      recovery.begin(software: softwareDecoder);
       await player.open(
-        Media(
-          url,
-          httpHeaders: {...?resolved?.headers, ...headers, ...capturedHeaders},
-          start: resume,
-        ),
+        Media(url, httpHeaders: currentMediaHeaders, start: resume),
         play: active,
       );
       if (mounted && token == generation) {
@@ -249,6 +383,14 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
         showControls();
       }
     } catch (failure) {
+      if (mounted &&
+          token == generation &&
+          currentMediaUri != null &&
+          isDecodeError('$failure')) {
+        setState(() => loading = false);
+        recovery.error('$failure');
+        return;
+      }
       if (mounted && token == generation) {
         setState(() {
           loading = false;
@@ -266,6 +408,8 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
         state != AppLifecycleState.hidden &&
         state != AppLifecycleState.detached;
     if (!active) {
+      wantsPlayback = false;
+      recovery.cancel();
       unawaited(save());
       unawaited(player.pause());
       probe?.cancel();
@@ -292,7 +436,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     if (!mounted) return;
     hideTimer?.cancel();
     if (mounted && !visible) setState(() => visible = true);
-    if (!playing || loading) return;
+    if (!playing || loading || error != null) return;
     final timeout = controlsTimeout(
       fullscreen: full,
       autoHideFullscreen:
@@ -379,40 +523,62 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
 
   Future<void> chooseEpisode() async {
     hideTimer?.cancel();
-    await playerSheet(
-      (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * .75,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Text('选集', style: Theme.of(sheetContext).textTheme.titleLarge),
-              for (var l = 0; l < widget.lines.length; l++) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(widget.lines[l].name),
+    (int, int)? selection;
+    Widget panel(BuildContext context) => EpisodePanel(
+      lines: widget.lines,
+      line: line,
+      episode: episode,
+      onSelect: (l, e) {
+        selection = (l, e);
+        Navigator.pop(context);
+      },
+      onClose: () => Navigator.pop(context),
+    );
+    if (full) {
+      await showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: '关闭选集',
+        transitionDuration: const Duration(milliseconds: 180),
+        transitionBuilder: (context, animation, secondary, child) =>
+            SlideTransition(
+              position: Tween(begin: const Offset(1, 0), end: Offset.zero)
+                  .animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+              child: child,
+            ),
+        pageBuilder: (context, animation, secondary) => Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width.clamp(0, 400).toDouble(),
+            child: Theme(
+              data: ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Theme.of(this.context).colorScheme.primary,
+                  brightness: Brightness.dark,
                 ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (var e = 0; e < widget.lines[l].episodes.length; e++)
-                      ChoiceChip(
-                        label: Text(widget.lines[l].episodes[e].name),
-                        selected: l == line && e == episode,
-                        onSelected: (_) {
-                          Navigator.pop(sheetContext);
-                          unawaited(load(l, e));
-                        },
-                      ),
-                  ],
-                ),
-              ],
-            ],
+              ),
+              child: Material(
+                color: const Color(0xff181c24),
+                child: SafeArea(child: panel(context)),
+              ),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      await playerSheet(
+        (context) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * .75,
+          child: panel(context),
+        ),
+      );
+    }
+    if (mounted && selection != null) await load(selection!.$1, selection!.$2);
     showControls();
   }
 
@@ -449,6 +615,27 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                   },
                 ),
                 const SizedBox(height: 20),
+                const Text('解码方式'),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final mode in ['auto', 'software'])
+                      ChoiceChip(
+                        label: Text(mode == 'auto' ? '自动 · 优先硬解' : '兼容 · 软解'),
+                        selected: softwareDecoder == (mode == 'software'),
+                        onSelected: (_) async {
+                          await widget.controller.setSetting(
+                            'anime-player-decoder',
+                            mode,
+                          );
+                          if (!mounted || !sheetContext.mounted) return;
+                          await reopenMedia(software: mode == 'software');
+                          if (sheetContext.mounted) update(() {});
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 const Text('倍速'),
                 Wrap(
                   spacing: 8,
@@ -564,9 +751,27 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                   icon: const Icon(Icons.subtitles_outlined),
                   label: const Text('导入外部字幕'),
                 ),
+                const SizedBox(height: 12),
+                Text('当前解码：${softwareDecoder ? '兼容软解' : '自动'}'),
+                if (lastPlayerMessage.isNotEmpty)
+                  Text(
+                    lastPlayerMessage,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                TextButton.icon(
+                  onPressed: () => Clipboard.setData(
+                    ClipboardData(
+                      text:
+                          'anime $appVersion · ${Platform.operatingSystem}\n片源 ${widget.source.rule.name}\n解码 ${softwareDecoder ? 'software' : 'auto'}\n位置 ${position.inSeconds} / ${duration.inSeconds}\n$lastPlayerMessage',
+                    ),
+                  ),
+                  icon: const Icon(Icons.copy_rounded),
+                  label: const Text('复制播放诊断'),
+                ),
                 const SizedBox(height: 16),
                 const Text(
-                  '横向滑动定位，左侧上下滑动调节亮度，右侧调节音量。长按临时 2 倍速，松开恢复。全屏顶部保留系统下拉手势。',
+                  '横向滑动定位，左侧调亮度、右侧调音量。长按临时 2 倍速。全屏点击画面保留控制栏，点击右上方收起按钮隐藏。',
                 ),
               ],
             ),
@@ -611,6 +816,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
   void dispose() {
     unawaited(save());
     generation++;
+    recovery.cancel();
     client?.close();
     probe?.cancel();
     hideTimer?.cancel();
@@ -667,7 +873,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
         bindings: {
           const SingleActivator(LogicalKeyboardKey.space): () {
             if (!locked) {
-              unawaited(player.playOrPause());
+              unawaited(togglePlayback());
               showControls();
             }
           },
@@ -770,6 +976,8 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                 onTap: () {
                                   if (locked) {
                                     showControls();
+                                  } else if (full) {
+                                    showControls();
                                   } else {
                                     setState(() => visible = !visible);
                                     if (visible) showControls();
@@ -778,7 +986,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                 onDoubleTap: locked
                                     ? null
                                     : () {
-                                        unawaited(player.playOrPause());
+                                        unawaited(togglePlayback());
                                         showControls();
                                       },
                                 onHorizontalDragStart: locked || loading
@@ -914,6 +1122,21 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                   },
                                 ),
                               ),
+                            if (playbackNotice != null && error == null)
+                              Center(
+                                child: Card(
+                                  color: Colors.black87,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Text(
+                                      playbackNotice!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             if (error != null)
                               Center(
                                 child: Padding(
@@ -944,8 +1167,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                             load(
                                               line,
                                               episode,
-                                              forceBrowser:
-                                                  verification == null,
+                                              resume: position,
                                             ),
                                           );
                                         },
@@ -959,9 +1181,20 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ),
-                            if (!locked && error == null)
+                            if (!locked)
                               PlayerControls(
                                 full: full,
+                                buffer: buffered,
+                                failed: error != null,
+                                onHide: () {
+                                  hideTimer?.cancel();
+                                  setState(() => visible = false);
+                                },
+                                onNext:
+                                    episode + 1 <
+                                        widget.lines[line].episodes.length
+                                    ? () => unawaited(load(line, episode + 1))
+                                    : null,
                                 visible: visible,
                                 playing: playing,
                                 loading: loading,
@@ -972,7 +1205,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                 subtitle:
                                     '${widget.lines[line].name} · ${current.name}',
                                 onPlay: () {
-                                  unawaited(player.playOrPause());
+                                  unawaited(togglePlayback());
                                   showControls();
                                 },
                                 onFullscreen: () =>
