@@ -84,6 +84,9 @@ jobs:
             exit 1
           fi
           cd dist
+          apk=$(find . -type f -name app-release.apk -print -quit)
+          test -n "$apk"
+          if [ "$apk" != './app-release.apk' ]; then cp "$apk" app-release.apk; fi
           test -f app-release.apk
           sha256sum app-release.apk anime-*-windows-x64.zip > sha256sums.txt
           gh release create "$RELEASE_TAG" app-release.apk anime-*-windows-x64.zip sha256sums.txt --verify-tag --title "$RELEASE_TAG" --generate-notes
