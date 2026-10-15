@@ -8,9 +8,10 @@ import 'tokusatsu.dart';
 class BangumiCatalog {
   BangumiCatalog({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
-  Future<List<Subject>>? _calendar;
+  Future<List<JsonMap>>? _calendar;
+  DateTime? _calendarLoadedAt;
   static const _headers = {
-    'User-Agent': 'ziyong/1.6.0 (https://github.com/koimiku/ziyong)',
+    'User-Agent': 'ziyong/1.6.1 (https://github.com/koimiku/ziyong)',
     'Accept': 'application/json',
   };
 
@@ -35,18 +36,30 @@ class BangumiCatalog {
     return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
-  Future<List<Subject>> calendar({bool refresh = false}) {
-    if (refresh) _calendar = null;
-    return _calendar ??= _loadCalendar().catchError((Object error) {
+  Future<List<Subject>> calendar({bool refresh = false, int? weekday}) async {
+    if (weekday != null && (weekday < 1 || weekday > 7)) {
+      throw const FormatException('星期必须为 1 至 7');
+    }
+    if (refresh ||
+        (_calendarLoadedAt != null &&
+            DateTime.now().difference(_calendarLoadedAt!) >
+                const Duration(hours: 6))) {
       _calendar = null;
-      throw error;
-    });
-  }
-
-  Future<List<Subject>> _loadCalendar() async {
-    final payload = await _request('/calendar');
-    if (payload is! List) throw const FormatException('放送数据格式无效');
-    final days = [...payload.whereType<Map>()];
+    }
+    final request = _calendar ??= _loadCalendar();
+    late final List<JsonMap> payload;
+    try {
+      payload = await request;
+    } catch (_) {
+      if (identical(request, _calendar)) _calendar = null;
+      rethrow;
+    }
+    final days = payload
+        .where(
+          (day) =>
+              weekday == null || (day['weekday'] as Map?)?['id'] == weekday,
+        )
+        .toList();
     final today = DateTime.now().weekday;
     days.sort(
       (a, b) => (((a['weekday'] as Map?)?['id'] as int? ?? 1) - today + 7)
@@ -59,11 +72,20 @@ class BangumiCatalog {
     final subjects = <String, Subject>{};
     for (final day in days) {
       for (final row in (day['items'] as List? ?? []).whereType<JsonMap>()) {
-        final subject = Subject(row);
-        if (row['id'] != null) subjects[subject.id] = subject;
+        if (row['id'] != null && (row['type'] == null || row['type'] == 2)) {
+          final subject = Subject(row);
+          subjects[subject.id] = subject;
+        }
       }
     }
     return subjects.values.toList();
+  }
+
+  Future<List<JsonMap>> _loadCalendar() async {
+    final payload = await _request('/calendar');
+    if (payload is! List) throw const FormatException('放送数据格式无效');
+    _calendarLoadedAt = DateTime.now();
+    return payload.whereType<JsonMap>().toList();
   }
 
   Future<List<Subject>> search(String keyword) async {

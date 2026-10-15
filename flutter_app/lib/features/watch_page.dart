@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -16,6 +15,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../domain/playback_policy.dart';
+import 'player_controls.dart';
 
 import '../app_controller.dart';
 import '../domain/library_backup.dart';
@@ -104,7 +104,10 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
         }
         unawaited(WakelockPlus.toggle(enable: value && active));
         if (!value) unawaited(save());
-        if (mounted) setState(() {});
+        if (mounted) {
+          setState(() {});
+          showControls();
+        }
       }),
     );
     subscriptions.add(
@@ -285,9 +288,11 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
   }
 
   void showControls() {
+    if (!mounted) return;
     hideTimer?.cancel();
-    if (mounted) setState(() => visible = true);
-    hideTimer = Timer(const Duration(seconds: 4), () {
+    if (mounted && !visible) setState(() => visible = true);
+    if (!playing || loading) return;
+    hideTimer = Timer(playerControlsTimeout, () {
       if (mounted && playing && !loading) setState(() => visible = false);
     });
   }
@@ -338,18 +343,39 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> chooseEpisode() async {
-    hideTimer?.cancel();
+  Future<void> playerSheet(WidgetBuilder builder) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: full ? const Color(0xff181c24) : null,
+      builder: (_) => Theme(
+        data: full
+            ? ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Theme.of(context).colorScheme.primary,
+                  brightness: Brightness.dark,
+                ),
+                useMaterial3: true,
+                scaffoldBackgroundColor: const Color(0xff181c24),
+              )
+            : Theme.of(context),
+        child: Builder(builder: builder),
+      ),
+    );
+  }
+
+  Future<void> chooseEpisode() async {
+    hideTimer?.cancel();
+    await playerSheet(
+      (sheetContext) => SafeArea(
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * .75,
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Text('选集', style: Theme.of(context).textTheme.titleLarge),
+              Text('选集', style: Theme.of(sheetContext).textTheme.titleLarge),
               for (var l = 0; l < widget.lines.length; l++) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -381,17 +407,18 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
 
   Future<void> playbackSettings() async {
     hideTimer?.cancel();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
+    await playerSheet(
+      (sheetContext) => StatefulBuilder(
         builder: (sheetContext, update) => SafeArea(
           child: SizedBox(
             height: MediaQuery.sizeOf(sheetContext).height * .8,
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                Text('播放设置', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  '播放设置',
+                  style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 20),
                 const Text('倍速'),
                 Wrap(
@@ -589,6 +616,10 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
   Widget action(IconData icon, String tooltip, VoidCallback callback) =>
       IconButton(
         color: Colors.white,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.black45,
+          minimumSize: const Size(52, 52),
+        ),
         tooltip: tooltip,
         onPressed: callback,
         icon: Icon(icon),
@@ -904,152 +935,40 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ),
-                            if (visible && !locked && error == null) ...[
-                              Align(
-                                alignment: Alignment.topCenter,
-                                child: Container(
-                                  color: Colors.black45,
-                                  padding: EdgeInsets.fromLTRB(
-                                    4,
-                                    expanded ? 16 : 0,
-                                    4,
-                                    0,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      if (expanded)
-                                        action(
-                                          Icons.arrow_back,
-                                          '退出全屏',
-                                          () => unawaited(fullscreen(false)),
-                                        ),
-                                      Expanded(
-                                        child: Text(
-                                          current.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      if (expanded)
-                                        IconButton(
-                                          tooltip: '快进85秒',
-                                          onPressed: () {
-                                            unawaited(
-                                              player.seek(
-                                                seekPosition(
-                                                  position +
-                                                      const Duration(
-                                                        seconds: 85,
-                                                      ),
-                                                  duration,
-                                                ),
-                                              ),
-                                            );
-                                            showControls();
-                                          },
-                                          icon: const Stack(
-                                            alignment: Alignment.center,
-                                            children: [
-                                              CustomPaint(
-                                                size: Size(36, 36),
-                                                painter: _SkipArrowPainter(),
-                                              ),
-                                              Text(
-                                                '+85',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      if (expanded)
-                                        action(
-                                          Icons.playlist_play,
-                                          '选集',
-                                          chooseEpisode,
-                                        ),
-                                      action(
-                                        Icons.tune,
-                                        '播放设置',
-                                        playbackSettings,
-                                      ),
-                                    ],
+                            if (!locked && error == null)
+                              PlayerControls(
+                                full: full,
+                                visible: visible,
+                                playing: playing,
+                                loading: loading,
+                                position: position,
+                                duration: duration,
+                                rate: rate,
+                                title: widget.subject.title,
+                                subtitle:
+                                    '${widget.lines[line].name} · ${current.name}',
+                                onPlay: () {
+                                  unawaited(player.playOrPause());
+                                  showControls();
+                                },
+                                onFullscreen: () =>
+                                    unawaited(fullscreen(!full)),
+                                onEpisodes: chooseEpisode,
+                                onSettings: playbackSettings,
+                                onSkip: () => unawaited(
+                                  player.seek(
+                                    seekPosition(
+                                      position + const Duration(seconds: 85),
+                                      duration,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Align(
-                                alignment: Alignment.bottomCenter,
-                                child: Container(
-                                  color: Colors.black54,
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          action(
-                                            playing
-                                                ? Icons.pause
-                                                : Icons.play_arrow,
-                                            playing ? '暂停' : '播放',
-                                            () {
-                                              unawaited(player.playOrPause());
-                                              showControls();
-                                            },
-                                          ),
-                                          Text(
-                                            '${clock(position)} / ${clock(duration)}',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          action(
-                                            expanded
-                                                ? Icons.fullscreen_exit
-                                                : Icons.fullscreen,
-                                            '全屏',
-                                            () => unawaited(fullscreen(!full)),
-                                          ),
-                                        ],
-                                      ),
-                                      Slider(
-                                        value: position.inMilliseconds
-                                            .toDouble()
-                                            .clamp(
-                                              0,
-                                              duration.inMilliseconds
-                                                  .toDouble(),
-                                            ),
-                                        max: duration.inMilliseconds > 0
-                                            ? duration.inMilliseconds.toDouble()
-                                            : 1,
-                                        onChanged: loading
-                                            ? null
-                                            : (value) {
-                                                unawaited(
-                                                  player.seek(
-                                                    Duration(
-                                                      milliseconds: value
-                                                          .toInt(),
-                                                    ),
-                                                  ),
-                                                );
-                                                showControls();
-                                              },
-                                      ),
-                                    ],
-                                  ),
+                                onSeek: (value) => unawaited(
+                                  player.seek(seekPosition(value, duration)),
                                 ),
+                                onSeekStart: () => hideTimer?.cancel(),
+                                onActivity: showControls,
                               ),
-                            ],
                             if (expanded && visible)
                               Align(
                                 alignment: Alignment.centerLeft,
@@ -1075,29 +994,4 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
       ),
     );
   }
-}
-
-class _SkipArrowPainter extends CustomPainter {
-  const _SkipArrowPainter();
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final rect = Rect.fromLTWH(4, 4, size.width - 8, size.height - 8);
-    canvas.drawArc(rect, -math.pi / 2, math.pi * 1.75, false, paint);
-    final end = Offset(rect.center.dx, rect.top);
-    canvas.drawPath(
-      Path()
-        ..moveTo(end.dx - 4, end.dy - 3)
-        ..lineTo(end.dx + 1, end.dy)
-        ..lineTo(end.dx - 4, end.dy + 4),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_SkipArrowPainter oldDelegate) => false;
 }

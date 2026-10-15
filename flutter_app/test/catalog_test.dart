@@ -7,6 +7,43 @@ import 'package:anime_flutter/data/bangumi_catalog.dart';
 
 void main() {
   test(
+    'daily calendar filters the selected weekday and shares its cached request',
+    () async {
+      var calls = 0;
+      final catalog = BangumiCatalog(
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(
+            jsonEncode([
+              {
+                'weekday': {'id': 1},
+                'items': [
+                  {'id': 1, 'name': 'Monday'},
+                  {'id': 1, 'name': 'Monday'},
+                  {'id': 3, 'type': 1, 'name': 'Book'},
+                ],
+              },
+              {
+                'weekday': {'id': 2},
+                'items': [
+                  {'id': 2, 'name': 'Tuesday'},
+                ],
+              },
+            ]),
+            200,
+          );
+        }),
+      );
+      expect((await catalog.calendar(weekday: 1)).single.title, 'Monday');
+      expect((await catalog.calendar(weekday: 2)).single.title, 'Tuesday');
+      expect(await catalog.calendar(weekday: 7), isEmpty);
+      expect(calls, 1);
+      await catalog.calendar(weekday: 1, refresh: true);
+      expect(calls, 2);
+      catalog.close();
+    },
+  );
+  test(
     'calendar caches requests, removes duplicates and refreshes explicitly',
     () async {
       var requests = 0;

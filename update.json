@@ -1,8 +1,8 @@
 {
-  "version": "1.6.0",
-  "name": "v1.6.0",
-  "notes": "迁移至 Flutter 原生界面与播放器；包含 Bangumi 收藏和进度同步、WebDAV 备份恢复、规则管理分享、自定义启动、观看记录和 Windows 局域网手机观看。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.0",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.0/app-release.apk",
-  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.0/anime-1.6.0-windows-x64.zip"
+  "version": "1.6.1",
+  "name": "v1.6.1",
+  "notes": "恢复每日更新与星期切换、片源检测和一键安装；明确规则安装与更新状态；优化全屏触控、控制栏停留和深色播放器界面；移除设置中的开源许可入口。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.1",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.1/app-release.apk",
+  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.1/anime-1.6.1-windows-x64.zip"
 }

@@ -44,7 +44,7 @@ void main() {
         client: MockClient(
           (request) async => response([
             {
-              'weekday': {'id': 1},
+              'weekday': {'id': DateTime.now().weekday},
               'items': [subject],
             },
           ]),
@@ -87,7 +87,7 @@ void main() {
         }
         return response([
           {
-            'weekday': {'id': 1},
+            'weekday': {'id': DateTime.now().weekday},
             'items': [subject],
           },
         ]);
@@ -125,7 +125,7 @@ void main() {
           request.url.path == '/calendar'
               ? [
                   {
-                    'weekday': {'id': 1},
+                    'weekday': {'id': DateTime.now().weekday},
                     'items': [subject],
                   },
                 ]

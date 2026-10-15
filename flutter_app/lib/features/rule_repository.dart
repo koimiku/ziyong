@@ -1,68 +1,78 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
+import '../data/rule_tools.dart';
 import '../domain/library_backup.dart';
-import '../rules/rule_engine.dart';
-import '../rules/site_client.dart';
-
-const rulesRepository =
-    'https://raw.githubusercontent.com/Predidit/KazumiRules/main';
 
 class RuleRepositoryPage extends StatefulWidget {
-  const RuleRepositoryPage({super.key, required this.controller});
+  const RuleRepositoryPage({
+    super.key,
+    required this.controller,
+    this.repository,
+  });
   final AppController controller;
+  final RuleRepository? repository;
   @override
   State<RuleRepositoryPage> createState() => _RuleRepositoryPageState();
 }
 
 class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
-  final client = SiteClient();
-  late Future<List<JsonMap>> index = load();
+  late final repository = widget.repository ?? RuleRepository();
+  late Future<List<JsonMap>> index = repository.index();
   String installing = '';
-  Future<List<JsonMap>> load() async {
-    final raw = await client.request(
-      const PreparedRequest('$rulesRepository/index.json'),
+  int completed = 0, total = 0;
+  JsonMap? installed(JsonMap entry) => widget.controller.library.rules
+      .where((rule) => rule['name'] == entry['name'])
+      .firstOrNull;
+  bool updateAvailable(JsonMap entry) =>
+      installed(entry) != null &&
+      compareRuleVersions(entry['version'], installed(entry)!['version']) > 0;
+  Future<void> install(List<JsonMap> entries) async {
+    if (installing.isNotEmpty || entries.isEmpty) return;
+    setState(() {
+      installing = '${entries.first['name']}';
+      completed = 0;
+      total = entries.length;
+    });
+    var failed = 0;
+    for (final entry in entries) {
+      if (!mounted) return;
+      setState(() => installing = '${entry['name']}');
+      try {
+        final raw = await repository.fetch(entry);
+        if (!mounted) return;
+        final old = installed(entry);
+        if (old != null &&
+            compareRuleVersions(raw['version'], old['version']) < 0) {
+          throw const FormatException('本地版本较新');
+        }
+        await widget.controller.restore(
+          LibraryBackup(
+            rules: [
+              {...raw, if (old?['disabled'] == true) 'disabled': true},
+            ],
+          ),
+        );
+        completed++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    setState(() => installing = '');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '已完成 $completed 项${failed == 0 ? '' : ' · $failed 项失败，可重试'}',
+        ),
+      ),
     );
-    final rows = (jsonDecode(raw) as List).cast<JsonMap>();
-    return rows
-        .where(
-          (row) => RegExp(r'^[A-Za-z0-9._-]{1,80}$').hasMatch('${row['name']}'),
-        )
-        .take(1000)
-        .toList();
   }
 
   @override
   void dispose() {
-    client.close();
+    repository.close();
     super.dispose();
-  }
-
-  Future<void> install(JsonMap entry) async {
-    setState(() => installing = '${entry['name']}');
-    try {
-      final raw = await client.request(
-        PreparedRequest(
-          '$rulesRepository/${Uri.encodeComponent(entry['name'])}.json',
-        ),
-      );
-      final rule = SourceRule(jsonDecode(raw) as JsonMap);
-      if (rule.name != entry['name']) throw const FormatException('规则名称不匹配');
-      await widget.controller.restore(LibraryBackup(rules: [rule.data]));
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('已安装 ${rule.name}')));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('安装未完成，请稍后重试')));
-      }
-    } finally {
-      if (mounted) setState(() => installing = '');
-    }
   }
 
   @override
@@ -72,8 +82,10 @@ class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
       actions: [
         IconButton(
           tooltip: '刷新',
-          onPressed: () => setState(() => index = load()),
-          icon: const Icon(Icons.refresh),
+          onPressed: installing.isNotEmpty
+              ? null
+              : () => setState(() => index = repository.index()),
+          icon: const Icon(Icons.refresh_rounded),
         ),
       ],
     ),
@@ -83,7 +95,7 @@ class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
         if (snapshot.hasError) {
           return Center(
             child: TextButton(
-              onPressed: () => setState(() => index = load()),
+              onPressed: () => setState(() => index = repository.index()),
               child: const Text('加载失败，点击重试'),
             ),
           );
@@ -91,28 +103,107 @@ class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return ListView(
-          children: [
-            for (final entry in snapshot.data!)
-              ListTile(
-                title: Text('${entry['name']}'),
-                subtitle: Text('版本 ${entry['version']}'),
-                trailing: installing == entry['name']
-                    ? const CircularProgressIndicator()
-                    : TextButton(
-                        onPressed: installing.isEmpty
-                            ? () => install(entry)
-                            : null,
-                        child: Text(
-                          widget.controller.library.rules.any(
-                                (rule) => rule['name'] == entry['name'],
-                              )
-                              ? '更新'
-                              : '安装',
-                        ),
+        return ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) {
+            final entries = snapshot.data!;
+            final missing = entries
+                .where((entry) => installed(entry) == null)
+                .toList();
+            final updates = entries.where(updateAvailable).toList();
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '已安装 ${entries.length - missing.length} / ${entries.length}',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-              ),
-          ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: installing.isEmpty && missing.isNotEmpty
+                                ? () => install(missing)
+                                : null,
+                            icon: const Icon(Icons.download_rounded),
+                            label: Text(
+                              missing.isEmpty
+                                  ? '全部已安装'
+                                  : '一键安装 (${missing.length})',
+                            ),
+                          ),
+                          if (updates.isNotEmpty)
+                            OutlinedButton(
+                              onPressed: installing.isEmpty
+                                  ? () => install(updates)
+                                  : null,
+                              child: Text('更新全部 (${updates.length})'),
+                            ),
+                        ],
+                      ),
+                      if (installing.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        LinearProgressIndicator(
+                          value: total > 0 ? completed / total : null,
+                        ),
+                        Text('正在安装 $installing · $completed / $total'),
+                      ],
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: entries.length,
+                    itemBuilder: (context, i) {
+                      final entry = entries[i], local = installed(entry);
+                      final update = updateAvailable(entry);
+                      final status = local == null
+                          ? '未安装'
+                          : update
+                          ? '已安装 · 可更新'
+                          : '已安装${local['disabled'] == true ? ' · 已停用' : ' · 已启用'}';
+                      return ListTile(
+                        leading: Icon(
+                          local == null
+                              ? Icons.add_circle_outline_rounded
+                              : update
+                              ? Icons.update_rounded
+                              : Icons.check_circle_rounded,
+                          color: local == null
+                              ? Theme.of(context).colorScheme.outline
+                              : Theme.of(context).colorScheme.primary,
+                        ),
+                        title: Text('${entry['name']}'),
+                        subtitle: Text(
+                          '$status\n${local == null ? '仓库版本 ${entry['version']}' : '本地 ${local['version']} · 仓库 ${entry['version']}'}',
+                        ),
+                        isThreeLine: true,
+                        trailing: TextButton(
+                          onPressed:
+                              installing.isEmpty && (local == null || update)
+                              ? () => install([entry])
+                              : null,
+                          child: Text(
+                            local == null
+                                ? '安装'
+                                : update
+                                ? '更新'
+                                : '已安装',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     ),

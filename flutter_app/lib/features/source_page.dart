@@ -13,6 +13,7 @@ import 'watch_page.dart';
 import 'service_pages.dart';
 import '../data/tokusatsu.dart';
 import 'rule_repository.dart';
+import 'rule_health_page.dart';
 
 class SourcePage extends StatefulWidget {
   const SourcePage({
@@ -394,10 +395,44 @@ class _RuleLibraryPageState extends State<RuleLibraryPage> {
       builder: (context, _) => ListView(
         children: [
           if (busy) const LinearProgressIndicator(),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RuleHealthPage(controller: widget.controller),
+                    ),
+                  ),
+                  icon: const Icon(Icons.network_check_rounded),
+                  label: const Text('片源检测'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RuleRepositoryPage(controller: widget.controller),
+                    ),
+                  ),
+                  icon: const Icon(Icons.download_rounded),
+                  label: const Text('一键安装'),
+                ),
+              ],
+            ),
+          ),
           for (final rule in widget.controller.library.rules)
             ListTile(
               title: Text('${rule['name']}'),
-              subtitle: Text('${rule['baseUrl'] ?? rule['baseURL'] ?? ''}'),
+              subtitle: Text(
+                '已安装 · ${rule['disabled'] == true ? '已停用' : '已启用'} · v${rule['version']}\n${rule['baseUrl'] ?? rule['baseURL'] ?? ''}',
+              ),
+              isThreeLine: true,
               onTap: () => Navigator.push<void>(
                 context,
                 MaterialPageRoute(

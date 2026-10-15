@@ -218,10 +218,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
   final query = TextEditingController();
   late Future<List<Subject>> results;
   String keyword = '';
+  int weekday = DateTime.now().weekday;
+  static const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   @override
   void initState() {
     super.initState();
-    results = widget.catalog.calendar();
+    results = widget.catalog.calendar(weekday: weekday);
   }
 
   @override
@@ -235,14 +237,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
     setState(() {
       keyword = query.text.trim();
       results = keyword.isEmpty
-          ? widget.catalog.calendar()
+          ? widget.catalog.calendar(weekday: weekday)
           : widget.catalog.search(keyword);
     });
   }
 
   void reload() => setState(() {
     results = keyword.isEmpty
-        ? widget.catalog.calendar(refresh: true)
+        ? widget.catalog.calendar(refresh: true, weekday: weekday)
         : widget.catalog.search(keyword);
   });
   @override
@@ -287,7 +289,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 children: [
                   Expanded(
                     child: Text(
-                      keyword.isEmpty ? '本周放送' : '“$keyword”的搜索结果',
+                      keyword.isEmpty
+                          ? '每日更新 · ${weekdays[weekday - 1]}'
+                          : '“$keyword”的搜索结果',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
@@ -298,6 +302,30 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   ),
                 ],
               ),
+              if (keyword.isEmpty)
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (var day = 1; day <= 7; day++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(
+                              day == DateTime.now().weekday
+                                  ? '今天 · ${weekdays[day - 1]}'
+                                  : weekdays[day - 1],
+                            ),
+                            selected: weekday == day,
+                            onSelected: (_) => setState(() {
+                              weekday = day;
+                              results = widget.catalog.calendar(weekday: day);
+                            }),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -328,11 +356,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
           }
           final items = snapshot.data ?? [];
           if (items.isEmpty) {
-            return const SliverToBoxAdapter(
+            return SliverToBoxAdapter(
               child: EmptyState(
                 icon: Icons.search_off_rounded,
-                title: '没有找到相关番剧',
-                message: '试试简称或其他名称',
+                title: keyword.isEmpty ? '这一天暂无更新' : '没有找到相关番剧',
+                message: keyword.isEmpty ? '可以切换星期查看其他更新' : '试试简称或其他名称',
               ),
             );
           }
@@ -925,16 +953,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       );
                       await controller.restore(const LibraryBackup());
                     }),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.description_outlined),
-              title: const Text('开源许可'),
-              onTap: () => showLicensePage(
-                context: context,
-                applicationName: 'anime',
-                applicationVersion: appVersion,
-              ),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
