@@ -1,22 +1,24 @@
 {
   "name": "anime",
-  "version": "1.5.10",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
   "description": "anime - 番剧搜索与多源播放",
   "author": "Anime",
   "scripts": {
-    "start": "node server.mjs",
-    "app": "node scripts/run-app.mjs",
-    "app:dev": "node scripts/run-app.mjs",
+    "start": "node scripts/run-flutter.mjs",
+    "app": "node scripts/run-flutter.mjs",
+    "app:dev": "cd flutter_app && flutter run -d windows",
     "fix:electron": "node scripts/ensure-electron.mjs --force",
     "android:www": "node scripts/prepare-android-www.mjs",
     "android:sync": "npm run android:www && npx cap sync android",
     "android:open": "npm run android:sync && npx cap open android",
-    "android:build": "npm run android:sync && cd android && .\\gradlew.bat assembleRelease",
-    "dist": "electron-builder --win",
-    "dist:dir": "electron-builder --win --dir"
+    "android:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-flutter-windows.ps1 -Target android",
+    "dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-flutter-windows.ps1",
+    "dist:dir": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-flutter-windows.ps1",
+    "legacy:server": "node server.mjs",
+    "legacy:electron": "node scripts/run-app.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.7",

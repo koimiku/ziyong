@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 function harness() {
   const storage = new Map([["anime-bangumi-token","test-token"],["anime-bangumi-user",JSON.stringify({username:"tester"})]]);
   const calls = [];
-  let remote = [], fail = false;
+  let remote = [], fail = false, failProgress = false;
   const context = {
     Date, Event, console, setTimeout: () => 1, clearTimeout() {},
     CustomEvent: class extends Event { constructor(name, options) { super(name); this.detail = options?.detail; } },
@@ -14,6 +14,7 @@ function harness() {
     getWatchHistory: () => [], mergeExternalHistory() {}, resolveEpisodeNumber: () => 1,
     async bangumiRequest(path, options = {}) {
       calls.push({path, ...options});
+      if (failProgress && options.method === "PATCH") return {ok:false,status:500,text:async()=>"offline"};
       if (fail && options.method === "POST") return {ok:false,status:500,text:async()=>"offline"};
       if (path.startsWith("/v0/episodes?")) return {ok:true,status:200,json:async()=>({data:[{id:100,sort:1}]})};
       return {ok:true,status:200,json:async()=>({data:remote}),text:async()=>""};
@@ -25,7 +26,7 @@ function harness() {
       .replace(/^import[\s\S]*?from\s+"[^"]+";\r?\n/gm,"").replaceAll("export ","");
     vm.runInContext(code,context);
   }
-  return {context,calls,remote(value){remote=value;},fail(){fail=true;}};
+  return {context,calls,remote(value){remote=value;},fail(){fail=true;},failProgress(value){failProgress=value;}};
 }
 test("local pending status wins during sync and maps to the Bangumi type", async () => {
   const h=harness();
@@ -70,4 +71,28 @@ test("existing 1.5.9 collections are queued for their first cloud sync", async (
   await h.context.pushPendingCollections();
   assert.equal(h.calls.find(call=>call.method==="POST").body.type,2);
   assert.equal(h.context.getPendingCollections().length,0);
+});
+
+test("progress uploads coalesce concurrent repeats and only upload a higher episode", async () => {
+  const h = harness();
+  await Promise.all(Array.from({length: 12}, () => h.context.pushSubjectProgress("test-token", 42, 1)));
+  assert.equal(h.calls.filter(call => call.method === "PATCH").length, 1);
+  assert.equal(h.calls.filter(call => call.path.startsWith("/v0/episodes?")).length, 1);
+  await h.context.pushSubjectProgress("test-token", 42, 1);
+  await h.context.pushSubjectProgress("test-token", 42, 2);
+  await h.context.pushSubjectProgress("test-token", 42, 1);
+  assert.equal(h.calls.filter(call => call.method === "PATCH").length, 2);
+});
+
+test("failed progress is retried and logout cannot upload with an old token", async () => {
+  const h = harness();
+  h.failProgress(true);
+  await assert.rejects(h.context.pushSubjectProgress("test-token", 42, 1));
+  h.failProgress(false);
+  await h.context.pushSubjectProgress("test-token", 42, 1);
+  assert.equal(h.calls.filter(call => call.method === "PATCH").length, 2);
+  h.context.logoutBangumi();
+  const before = h.calls.length;
+  await h.context.pushSubjectProgress("test-token", 42, 2);
+  assert.equal(h.calls.length, before);
 });

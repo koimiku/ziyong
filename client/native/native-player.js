@@ -7,7 +7,7 @@ const COVER_CLASSES = [
   "search-dialog-open",
   "search-focused",
 ];
-const COVER_SELECTOR = ".kz-dialog-scrim";
+const COVER_SELECTOR = ".kz-dialog-scrim, dialog[open]";
 const SAMPLE_POINTS = [
   [0.5, 0.5],
   [0.3, 0.5],
@@ -15,7 +15,7 @@ const SAMPLE_POINTS = [
   [0.5, 0.25],
   [0.5, 0.75],
 ];
-const COVER_CHECK_MS = 100;
+const MOTION_TRACK_MS = 500;
 
 let availability = null;
 let fullscreen = false;
@@ -51,10 +51,12 @@ export function createNativeVideo(frame, hooks = {}) {
   let paused = true;
   let handles = [];
   let raf = 0;
-  let lastCoverCheck = -Infinity;
+  let motionUntil = 0;
   let lastRect = "";
   let lastVisible = null;
-  let coveredNow = false;
+  let resizeObserver;
+  let layoutObserver;
+  const motionEvents = ["scroll", "resize", "transitionrun", "transitionend", "animationstart", "animationend"];
 
   const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
   const syncTheme = () => api.setInfo({ dark: document.documentElement.dataset.theme === "dark", accent: accentColor() }).catch(() => {});
@@ -70,6 +72,7 @@ export function createNativeVideo(frame, hooks = {}) {
     if (handles.length) return;
     document.addEventListener("anime:theme-changed", syncTheme);
     document.addEventListener("visibilitychange", syncVisibility);
+    observeLayout();
     const add = (name, handler) => handles.push(Promise.resolve(api.addListener(name, handler)));
     add("progress", (data) => {
       position = Number(data?.position) || 0;
@@ -103,6 +106,7 @@ export function createNativeVideo(frame, hooks = {}) {
     document.removeEventListener("visibilitychange", syncVisibility);
     handles.forEach((pending) => pending.then((handle) => handle?.remove?.()).catch(() => {}));
     handles = [];
+    unobserveLayout();
   }
 
   function frameRect() {
@@ -129,6 +133,34 @@ export function createNativeVideo(frame, hooks = {}) {
     });
   }
 
+  // Static playback needs no WebView frame loop. Track geometry when layout
+  // changes, with a short frame burst during scrolling and page animations.
+  function observeLayout() {
+    motionEvents.forEach(name => window.addEventListener(name, trackMotion, { capture: true, passive: true }));
+    resizeObserver = new ResizeObserver(() => startSync());
+    resizeObserver.observe(frame);
+    if (frame.parentElement) resizeObserver.observe(frame.parentElement);
+    layoutObserver = new MutationObserver(records => {
+      if (records.some(record => record.type === "attributes"
+        ? record.target === document.body || record.target === document.documentElement
+          || record.target.contains(frame) || record.target.matches?.("dialog, .kz-dialog-scrim, .option-dropdown")
+        : [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1))) startSync();
+    });
+    layoutObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "style", "hidden", "open"] });
+  }
+
+  function unobserveLayout() {
+    motionEvents.forEach(name => window.removeEventListener(name, trackMotion, true));
+    resizeObserver?.disconnect();
+    layoutObserver?.disconnect();
+  }
+
+  function trackMotion() {
+    if (document.hidden || fullscreen) return;
+    motionUntil = performance.now() + MOTION_TRACK_MS;
+    startSync();
+  }
+
   function sync(now) {
     raf = 0;
     if (!frame.isConnected) {
@@ -136,7 +168,6 @@ export function createNativeVideo(frame, hooks = {}) {
       return;
     }
     if (document.hidden || fullscreen) return;
-    raf = requestAnimationFrame(sync);
     const rect = frameRect();
     if (rect) {
       const key = `${rect.x},${rect.y},${rect.width},${rect.height}`;
@@ -145,28 +176,25 @@ export function createNativeVideo(frame, hooks = {}) {
         api.setRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }).catch(() => {});
       }
     }
-    if (now - lastCoverCheck >= COVER_CHECK_MS) {
-      lastCoverCheck = now;
-      coveredNow = rect ? isCovered(rect.css) : true;
-    }
-    const visible = Boolean(rect) && !coveredNow;
+    const visible = Boolean(rect) && !isCovered(rect.css);
     if (visible !== lastVisible) {
       lastVisible = visible;
       api.setVisible({ visible }).catch(() => {});
     }
+    if (now < motionUntil) raf = requestAnimationFrame(sync);
   }
 
   function startSync() {
     if (raf || document.hidden || fullscreen) return;
-    lastRect = "";
-    lastVisible = null;
-    lastCoverCheck = -Infinity;
     raf = requestAnimationFrame(sync);
   }
 
   function stopSync() {
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
+    motionUntil = 0;
+    lastRect = "";
+    lastVisible = null;
   }
 
   function stop() {

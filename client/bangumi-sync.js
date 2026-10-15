@@ -18,6 +18,8 @@ const EPISODE_BATCH = 80;
 
 let syncTimer = null;
 let syncPromise = null;
+const uploadedEpisodes = new Map();
+const progressUploads = new Map();
 const COLLECTION_TYPES = { planned: 1, completed: 2, watching: 3 };
 const COLLECTION_STATUS_BY_TYPE = { 1: "planned", 2: "completed", 3: "watching" };
 const knownCollectionTypes = new Map();
@@ -106,6 +108,9 @@ export async function loginBangumiWithToken(tokenInput) {
 
 export function logoutBangumi() {
   clearTimeout(collectionTimer);
+  clearTimeout(syncTimer);
+  uploadedEpisodes.clear();
+  progressUploads.clear();
   knownCollectionTypes.clear();
   localStorage.removeItem(TOKEN_KEY);
   setUser(null);
@@ -280,14 +285,23 @@ async function markEpisodesWatched(token, subjectId, episodeIds) {
   }
 }
 
-async function pushSubjectProgress(token, subjectId, episodeNumber, { finished = false } = {}) {
-  if (!subjectId || !episodeNumber || episodeNumber < 1) return;
-
-  // Anime progress is stored on each episode. ep_status is only accepted for books.
-  await ensureAnimeCollection(token, subjectId, finished);
-  const episodeIds = await listMainEpisodeIds(token, subjectId, episodeNumber);
-  if (!episodeIds.length) return;
-  await markEpisodesWatched(token, subjectId, episodeIds);
+async function pushSubjectProgress(token, subjectId, episodeNumber) {
+  if (!subjectId || !episodeNumber || episodeNumber < 1 || getBangumiToken() !== token) return;
+  const key = token + ":" + subjectId;
+  // Serialise per subject. Position updates in the same episode must not
+  // repeatedly download the episode list and rewrite already uploaded progress.
+  const previous = progressUploads.get(key) || Promise.resolve();
+  const upload = previous.catch(() => {}).then(async () => {
+    if (getBangumiToken() !== token || episodeNumber <= (uploadedEpisodes.get(key) || 0)) return;
+    await ensureAnimeCollection(token, subjectId);
+    const episodeIds = await listMainEpisodeIds(token, subjectId, episodeNumber);
+    if (!episodeIds.length || getBangumiToken() !== token) return;
+    await markEpisodesWatched(token, subjectId, episodeIds);
+    if (getBangumiToken() === token) uploadedEpisodes.set(key, episodeNumber);
+  });
+  progressUploads.set(key, upload);
+  try { await upload; }
+  finally { if (progressUploads.get(key) === upload) progressUploads.delete(key); }
 }
 
 export function syncBangumiHistory({ reason = "manual" } = {}) {

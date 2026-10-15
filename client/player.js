@@ -194,7 +194,9 @@ export function bindSourcePlayer(playlistState, episodeSourceMap, context = {}) 
 
   function startProgressTracking() {
     stopProgressTracking();
-    state.progressTimer = setInterval(() => saveProgress(false), 5000);
+    state.progressTimer = setInterval(() => {
+      if (!document.hidden && !media.paused) saveProgress(false);
+    }, 15000);
 
     const player = media;
     const onPause = () => saveProgress(true);

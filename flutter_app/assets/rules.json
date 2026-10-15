@@ -1,0 +1,253 @@
+[
+  {
+    "name": "AGE",
+    "version": "1.5",
+    "type": "anime",
+    "baseUrl": "https://www.agedm.io/",
+    "referer": "",
+    "userAgent": "",
+    "usePost": false,
+    "searchMode": "xpath",
+    "chapterMode": "xpath",
+    "searchURL": "https://www.agedm.io/search?query=@keyword",
+    "searchList": "//div[2]/div/section/div/div/div/div",
+    "searchName": "//div/div[2]/h5/a",
+    "searchResult": "//div/div[2]/h5/a",
+    "chapterRoads": "//div[2]/div/section/div/div[2]/div[2]/div[2]/div",
+    "chapterResult": "//ul/li/a",
+    "searchApiConfig": {
+      "request": {
+        "method": "GET",
+        "url": "",
+        "headers": {},
+        "query": {},
+        "bodyType": "none"
+      },
+      "listPath": "$.data[*]",
+      "namePath": "$.name",
+      "sourcePath": "$.url"
+    },
+    "chapterApiConfig": {
+      "request": {
+        "method": "GET",
+        "url": "",
+        "headers": {},
+        "query": {},
+        "bodyType": "none"
+      },
+      "format": "nested",
+      "roadsPath": "",
+      "roadNamePath": "",
+      "episodesPath": "$.episodes[*]",
+      "episodeNamePath": "$.name",
+      "episodeUrlPath": "$.url",
+      "roadNamesPath": "",
+      "roadEpisodesPath": "",
+      "roadSeparator": "$$$",
+      "episodeSeparator": "#",
+      "fieldSeparator": "$",
+      "variables": {},
+      "episodePage": null
+    },
+    "antiCrawlerConfig": {
+      "enabled": false,
+      "captchaType": 1,
+      "captchaImage": "",
+      "captchaInput": "",
+      "captchaButton": "",
+      "captchaDetectType": 1,
+      "captchaDetectValue": "",
+      "captchaScript": ""
+    }
+  },
+  {
+    "name": "akianime",
+    "version": "1.4",
+    "type": "anime",
+    "baseUrl": "https://www.akianime.cc/",
+    "referer": "",
+    "userAgent": "",
+    "usePost": false,
+    "searchMode": "xpath",
+    "chapterMode": "xpath",
+    "searchURL": "https://www.akianime.cc/bgmsearch/-------------.html?wd=@keyword",
+    "searchList": "//div[@class='vod-detail style-detail cor4 search-list']",
+    "searchName": "//div/div[2]/a/h3",
+    "searchResult": "//div/div[2]/div/div[1]/a",
+    "chapterRoads": "//ul[@class='anthology-list-play size']",
+    "chapterResult": "//li/a",
+    "searchApiConfig": {
+      "request": {
+        "method": "GET",
+        "url": "",
+        "headers": {},
+        "query": {},
+        "bodyType": "none"
+      },
+      "listPath": "$.data[*]",
+      "namePath": "$.name",
+      "sourcePath": "$.url"
+    },
+    "chapterApiConfig": {
+      "request": {
+        "method": "GET",
+        "url": "",
+        "headers": {},
+        "query": {},
+        "bodyType": "none"
+      },
+      "format": "nested",
+      "roadsPath": "",
+      "roadNamePath": "",
+      "episodesPath": "$.episodes[*]",
+      "episodeNamePath": "$.name",
+      "episodeUrlPath": "$.url",
+      "roadNamesPath": "",
+      "roadEpisodesPath": "",
+      "roadSeparator": "$$$",
+      "episodeSeparator": "#",
+      "fieldSeparator": "$",
+      "variables": {},
+      "episodePage": null
+    },
+    "antiCrawlerConfig": {
+      "enabled": false,
+      "captchaType": 1,
+      "captchaImage": "",
+      "captchaInput": "",
+      "captchaButton": "",
+      "captchaDetectType": 1,
+      "captchaDetectValue": "",
+      "captchaScript": ""
+    }
+  },
+  {
+    "api": "9",
+    "type": "anime",
+    "name": "giriGiriLove",
+    "version": "2.5",
+    "muliSources": true,
+    "useWebview": true,
+    "useNativePlayer": true,
+    "usePost": false,
+    "useLegacyParser": false,
+    "adBlocker": false,
+    "userAgent": "",
+    "baseURL": "https://ani.girigirilove.com",
+    "searchMode": "api",
+    "chapterMode": "xpath",
+    "searchApiConfig": {
+      "request": {
+        "method": "GET",
+        "url": "https://ani.girigirilove.com/index.php/ajax/suggest",
+        "query": {
+          "mid": "1",
+          "wd": "@keyword"
+        }
+      },
+      "listPath": "$.list[*]",
+      "namePath": "$.name",
+      "sourcePath": "$.id",
+      "sourceTemplate": "https://ani.girigirilove.com/GV@source/"
+    },
+    "searchURL": "",
+    "searchList": "",
+    "searchName": "",
+    "searchResult": "",
+    "chapterRoads": "//ul[@class='anthology-list-play size']",
+    "chapterResult": "//li/a",
+    "referer": ""
+  },
+  {
+    "type": "anime",
+    "detailURL": "/bangumi/@source.html",
+    "chapterRoads": "//",
+    "builtin": true,
+    "baseUrl": "https://dm1.xfdm.pro/",
+    "chapterResult": "//a",
+    "name": "xfdm",
+    "chapterPattern": "^/watch/(\\d+)/(\\d+)/(\\d+)\\.html$",
+    "searchApiConfig": {
+      "sourcePath": "$.id",
+      "listPath": "$.list[*]",
+      "request": {
+        "query": {
+          "limit": 20,
+          "mid": 1,
+          "wd": "@keyword"
+        },
+        "url": "/index.php/ajax/suggest"
+      },
+      "namePath": "$.name"
+    },
+    "version": "1.0",
+    "displayName": "稀饭动漫",
+    "searchMode": "api"
+  },
+  {
+    "type": "anime",
+    "detailURL": "/index.php/vod/detail/id/@source.html",
+    "chapterRoads": "//",
+    "builtin": true,
+    "baseUrl": "https://www.gugu3.com/",
+    "chapterResult": "//a",
+    "name": "gugu",
+    "chapterPattern": "^/index\\.php/vod/play/id/(\\d+)/sid/(\\d+)/nid/(\\d+)\\.html$",
+    "searchApiConfig": {
+      "sourcePath": "$.id",
+      "listPath": "$.list[*]",
+      "request": {
+        "query": {
+          "limit": 20,
+          "mid": 1,
+          "wd": "@keyword"
+        },
+        "url": "/index.php/ajax/suggest"
+      },
+      "namePath": "$.name"
+    },
+    "version": "1.0",
+    "displayName": "咕咕番",
+    "searchMode": "api"
+  },
+  {
+    "type": "anime",
+    "detailURL": "/vod/detail/id/@source.html",
+    "chapterRoads": "//",
+    "builtin": true,
+    "baseUrl": "https://omofun04.top/",
+    "chapterResult": "//a",
+    "name": "omofun",
+    "chapterPattern": "^/vod/play/id/(\\d+)/sid/(\\d+)/nid/(\\d+)\\.html$",
+    "searchApiConfig": {
+      "sourcePath": "$.id",
+      "listPath": "$.list[*]",
+      "request": {
+        "query": {
+          "limit": 20,
+          "mid": 1,
+          "wd": "@keyword"
+        },
+        "url": "/index.php/ajax/suggest"
+      },
+      "namePath": "$.name"
+    },
+    "version": "1.0",
+    "displayName": "Omofun",
+    "searchMode": "api"
+  },
+  {
+    "type": "anime",
+    "builtin": true,
+    "searchList": "//a[contains(@class,\"topic-list-item\")]",
+    "baseUrl": "https://www.xgcartoon.com/",
+    "searchName": "//div[contains(@class,\"h3\")]",
+    "chapterResult": "//a[contains(@class,\"goto-chapter\")]",
+    "name": "xgcartoon",
+    "searchURL": "/search?q=@keyword",
+    "searchResult": "//@href",
+    "version": "1.0",
+    "displayName": "西瓜卡通",
+    "chapterRoads": "//"
+  }
+]

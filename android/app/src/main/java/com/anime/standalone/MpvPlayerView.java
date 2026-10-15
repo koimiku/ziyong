@@ -53,9 +53,10 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     private int accent = Color.parseColor("#8AB8F8");
     private static final long HIDE_DELAY_MS = 3500;
-    private static final long PROGRESS_POST_MS = 250;
+    private static final long PROGRESS_POST_MS = 1000;
     private static final float[] SPEEDS = {0.75f, 1f, 1.25f, 1.5f, 2f};
     private static final int SEEK_MAX = 1000;
+    private static final int SYSTEM_TOP_EDGE_DP = 48;
 
     private static final int GESTURE_NONE = 0;
     private static final int GESTURE_SEEK = 1;
@@ -278,7 +279,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
             @Override
             public void onLongPress(MotionEvent event) {
-                if (paused || loading || gestureMode != GESTURE_NONE) return;
+                if (paused || loading || gestureMode != GESTURE_NONE || startsAtSystemTopEdge(event)) return;
                 speedBoost = true;
                 setMpvSpeed(2f);
                 showHint("2 倍速播放中", 0);
@@ -300,7 +301,8 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
             MPVLib.setOptionString("vo", "gpu");
             MPVLib.setOptionString("gpu-context", "android");
             MPVLib.setOptionString("opengl-es", "yes");
-            MPVLib.setOptionString("hwdec", "mediacodec-copy");
+            // Prefer direct hardware frames, keeping copy decoding as a fallback.
+            MPVLib.setOptionString("hwdec", "mediacodec,mediacodec-copy");
             MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
             MPVLib.setOptionString("ao", "audiotrack,opensles");
             MPVLib.setOptionString("tls-verify", "no");
@@ -330,6 +332,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
 
     public void release() {
         main.removeCallbacksAndMessages(null);
+        setKeepScreenOn(false);
         if (!ready) return;
         ready = false;
         try {
@@ -373,6 +376,11 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     public void stop() {
+        main.removeCallbacks(hideControlsTask);
+        main.removeCallbacks(hideHintTask);
+        paused = true;
+        buffering = false;
+        setKeepScreenOn(false);
         loading = false;
         pendingUrl = null;
         ended = false;
@@ -393,6 +401,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     public void pause() {
+        setKeepScreenOn(false);
         setPause(true);
     }
 
@@ -694,7 +703,17 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
         return true;
     }
 
+    private boolean startsAtSystemTopEdge(MotionEvent start) {
+        return fullscreen && start.getY() < dp(SYSTEM_TOP_EDGE_DP);
+    }
+
     private void handleDrag(MotionEvent start, MotionEvent event) {
+        // Reserve edge-originated swipes for the notification shade for their
+        // entire lifetime, even after the finger moves into the video area.
+        if (startsAtSystemTopEdge(start)) {
+            gestureMode = GESTURE_IGNORED;
+            return;
+        }
         float dx = event.getX() - start.getX();
         float dy = event.getY() - start.getY();
         if (gestureMode == GESTURE_NONE) {
@@ -815,6 +834,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     private void showControls() {
         if (controlsLocked) return;
         controlsVisible = true;
+        updateProgressViews();
         if (fullscreen) fade(lockButton, true);
         else lockButton.setVisibility(View.GONE);
         fade(topBar, true);
@@ -859,6 +879,7 @@ public class MpvPlayerView extends FrameLayout implements TextureView.SurfaceTex
     }
 
     private void updateProgressViews() {
+        if (!controlsVisible || controlsLocked || getVisibility() != View.VISIBLE) return;
         durationView.setText(formatTime(duration));
         if (!userSeeking) {
             positionView.setText(formatTime(position));

@@ -40,6 +40,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     private boolean unavailable;
     private PluginCall pendingLoad;
     private boolean active;
+    private boolean backgrounded;
     private boolean visible = true;
     private boolean fullscreen;
     private Runnable cancelFullscreenLayout;
@@ -110,6 +111,8 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
 
             active = true;
             player.load(url, userAgent, referer, fields.toString(), startAt);
+            // A delayed source response must not start playback after leaving the app.
+            if (backgrounded) player.pause();
             updateVisibility();
         });
     }
@@ -138,7 +141,7 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     @PluginMethod
     public void play(PluginCall call) {
         main.post(() -> {
-            if (player != null) player.play();
+            if (player != null && !backgrounded) player.play();
             call.resolve();
         });
     }
@@ -197,8 +200,14 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
     @Override
     protected void handleOnPause() {
         main.post(() -> {
+            backgrounded = true;
             if (player != null) player.pause();
         });
+    }
+
+    @Override
+    protected void handleOnResume() {
+        main.post(() -> backgrounded = false);
     }
 
     @Override
@@ -347,7 +356,6 @@ public class NativePlayerPlugin extends Plugin implements MpvPlayerView.Listener
         fullscreen = true;
         savedOrientation = activity.getRequestedOrientation();
         notifyFullscreen(true);
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // Keep the inline video intact until the first landscape layout. Commit
         // fullscreen before that layout is drawn, without a portrait expansion.
