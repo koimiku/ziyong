@@ -11,13 +11,9 @@ const image =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
 void main() {
   test(
-    'fullscreen controls stay visible unless auto-hide is explicitly enabled',
+    'fullscreen controls hide after six seconds while compact keeps eight',
     () {
-      expect(controlsTimeout(fullscreen: true), isNull);
-      expect(
-        controlsTimeout(fullscreen: true, autoHideFullscreen: true),
-        const Duration(seconds: 15),
-      );
+      expect(controlsTimeout(fullscreen: true), const Duration(seconds: 6));
       expect(controlsTimeout(fullscreen: false), const Duration(seconds: 8));
     },
   );

@@ -16,7 +16,6 @@ void main() {
     bool failed = false,
     VoidCallback? onFullscreen,
     VoidCallback? onEpisodes,
-    VoidCallback? onHide,
     ValueChanged<Duration>? onSeek,
   }) async {
     tester.view.physicalSize = size;
@@ -75,7 +74,6 @@ void main() {
                 onSeek: onSeek ?? (_) {},
                 onSeekStart: () {},
                 onActivity: () {},
-                onHide: onHide ?? () {},
                 onNext: () {},
               ),
             ),
@@ -106,9 +104,9 @@ void main() {
     },
   );
   testWidgets(
-    'failed media retains episode and exit actions and explicit hide',
+    'failed media retains episode and exit actions without a hide button',
     (tester) async {
-      var exits = 0, episodes = 0, hides = 0;
+      var exits = 0, episodes = 0;
       await mount(
         tester,
         size: const Size(568, 320),
@@ -116,14 +114,12 @@ void main() {
         failed: true,
         onFullscreen: () => exits++,
         onEpisodes: () => episodes++,
-        onHide: () => hides++,
       );
       await tester.tap(find.text('选集'));
       expect(episodes, 1);
       await tester.tap(find.widgetWithText(TextButton, '退出全屏'));
       expect(exits, 1);
-      await tester.tap(find.byTooltip('收起控制栏'));
-      expect(hides, 1);
+      expect(find.byTooltip('收起控制栏'), findsNothing);
       expect(
         tester
             .widget<IconButton>(

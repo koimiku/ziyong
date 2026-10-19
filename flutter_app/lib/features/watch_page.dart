@@ -54,6 +54,8 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
   Duration buffered = Duration.zero;
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? hideTimer, saveTimer;
+  int controlPanels = 0;
+  bool touchingControls = false;
   SiteClient? client;
   MediaProbe? probe;
   int line = 0, episode = 0, generation = 0;
@@ -436,20 +438,44 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     if (!mounted) return;
     hideTimer?.cancel();
     if (mounted && !visible) setState(() => visible = true);
-    if (!playing || loading || error != null) return;
-    final timeout = controlsTimeout(
-      fullscreen: full,
-      autoHideFullscreen:
-          widget
-              .controller
-              .library
-              .settings['anime-player-auto-hide-fullscreen'] ==
-          'true',
-    );
-    if (timeout == null) return;
-    hideTimer = Timer(timeout, () {
-      if (mounted && playing && !loading) setState(() => visible = false);
+    if ((!full && !playing) ||
+        loading ||
+        error != null ||
+        controlPanels > 0 ||
+        touchingControls) {
+      return;
+    }
+    hideTimer = Timer(controlsTimeout(fullscreen: full), () {
+      if (mounted &&
+          (full || playing) &&
+          !loading &&
+          error == null &&
+          controlPanels == 0 &&
+          !touchingControls) {
+        setState(() => visible = false);
+      }
     });
+  }
+
+  void holdControls() {
+    touchingControls = true;
+    hideTimer?.cancel();
+  }
+
+  void releaseControls() {
+    touchingControls = false;
+    showControls();
+  }
+
+  Future<void> withControlsHeld(Future<void> Function() action) async {
+    controlPanels++;
+    hideTimer?.cancel();
+    try {
+      await action();
+    } finally {
+      controlPanels--;
+      showControls();
+    }
   }
 
   Future<void> fullscreen(bool value) async {
@@ -521,7 +547,9 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> chooseEpisode() async {
+  Future<void> chooseEpisode() => withControlsHeld(chooseEpisodePanel);
+
+  Future<void> chooseEpisodePanel() async {
     hideTimer?.cancel();
     (int, int)? selection;
     Widget panel(BuildContext context) => EpisodePanel(
@@ -582,7 +610,9 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
     showControls();
   }
 
-  Future<void> playbackSettings() async {
+  Future<void> playbackSettings() => withControlsHeld(playbackSettingsPanel);
+
+  Future<void> playbackSettingsPanel() async {
     hideTimer?.cancel();
     await playerSheet(
       (sheetContext) => StatefulBuilder(
@@ -596,25 +626,6 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                   '播放设置',
                   style: Theme.of(sheetContext).textTheme.titleLarge,
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('自动隐藏全屏控制栏'),
-                  subtitle: const Text('默认保持显示；开启后 15 秒自动收起'),
-                  value:
-                      widget
-                          .controller
-                          .library
-                          .settings['anime-player-auto-hide-fullscreen'] ==
-                      'true',
-                  onChanged: (value) async {
-                    await widget.controller.setSetting(
-                      'anime-player-auto-hide-fullscreen',
-                      '$value',
-                    );
-                    if (mounted && sheetContext.mounted) update(() {});
-                  },
-                ),
-                const SizedBox(height: 20),
                 const Text('解码方式'),
                 Wrap(
                   spacing: 8,
@@ -771,7 +782,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  '横向滑动定位，左侧调亮度、右侧调音量。长按临时 2 倍速。全屏点击画面保留控制栏，点击右上方收起按钮隐藏。',
+                  '横向滑动定位，左侧调亮度、右侧调音量。长按临时 2 倍速。全屏点击画面显示或隐藏控制栏，6 秒无操作自动收起。',
                 ),
               ],
             ),
@@ -976,10 +987,9 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                 onTap: () {
                                   if (locked) {
                                     showControls();
-                                  } else if (full) {
-                                    showControls();
                                   } else {
                                     setState(() => visible = !visible);
+                                    hideTimer?.cancel();
                                     if (visible) showControls();
                                   }
                                 },
@@ -993,7 +1003,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                     ? null
                                     : (_) {
                                         dragPosition = position;
-                                        hideTimer?.cancel();
+                                        holdControls();
                                       },
                                 onHorizontalDragUpdate: locked || loading
                                     ? null
@@ -1020,16 +1030,16 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                           unawaited(player.seek(target));
                                         }
                                         setState(() => dragPosition = null);
-                                        showControls();
+                                        releaseControls();
                                       },
                                 onHorizontalDragCancel: () {
                                   setState(() => dragPosition = null);
-                                  showControls();
+                                  releaseControls();
                                 },
                                 onVerticalDragStart: locked || loading
                                     ? null
                                     : (details) {
-                                        hideTimer?.cancel();
+                                        holdControls();
                                         unawaited(
                                           startLevel(
                                             details.localPosition.dx >
@@ -1048,13 +1058,14 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                           adjustingVolume = null;
                                           gestureLabel = '';
                                         });
-                                        showControls();
+                                        releaseControls();
                                       },
                                 onVerticalDragCancel: () {
                                   setState(() {
                                     adjustingVolume = null;
                                     gestureLabel = '';
                                   });
+                                  releaseControls();
                                 },
                                 onLongPressStart: locked || loading
                                     ? null
@@ -1186,10 +1197,6 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                 full: full,
                                 buffer: buffered,
                                 failed: error != null,
-                                onHide: () {
-                                  hideTimer?.cancel();
-                                  setState(() => visible = false);
-                                },
                                 onNext:
                                     episode + 1 <
                                         widget.lines[line].episodes.length
@@ -1223,8 +1230,8 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                 onSeek: (value) => unawaited(
                                   player.seek(seekPosition(value, duration)),
                                 ),
-                                onSeekStart: () => hideTimer?.cancel(),
-                                onActivity: showControls,
+                                onSeekStart: holdControls,
+                                onActivity: releaseControls,
                               ),
                             if (expanded && visible)
                               Align(

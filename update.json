@@ -1,8 +1,8 @@
 {
-  "version": "1.6.5",
-  "name": "v1.6.5",
-  "notes": "修复全屏控制区点击穿透，点击画面保持控制栏，支持手动收起；调整底部播放和下一集、缓冲进度与侧栏选集。解码日志不再立即中断播放，停滞时自动尝试兼容软解，保留进度、倍速与请求头；可在播放设置选择解码方式。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.5",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.5/app-release.apk",
-  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.5/anime-1.6.5-windows-x64.zip"
+  "version": "1.6.6",
+  "name": "v1.6.6",
+  "notes": "全屏点击画面显示 / 隐藏控制栏，6 秒无操作自动收起；移除隐藏按钮和旧的自动收起开关。拖动进度、操作控制区、打开选集或设置时暂停计时，结束后重新计时。",
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.6",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.6/app-release.apk",
+  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.6/anime-1.6.6-windows-x64.zip"
 }

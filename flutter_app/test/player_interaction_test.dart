@@ -51,6 +51,13 @@ void main() {
       await tester.tap(find.byType(IconButton));
       expect(clicks, 1);
       expect(background, 0);
+      final held = await tester.startGesture(const Offset(40, 40));
+      await tester.pump(const Duration(seconds: 7));
+      expect(starts, 3);
+      expect(ends, 2);
+      await held.cancel();
+      expect(ends, 3);
+      expect(background, 0);
       await tester.tapAt(const Offset(40, 200));
       expect(background, 1);
     },

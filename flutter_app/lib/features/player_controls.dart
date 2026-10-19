@@ -3,12 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 const playerControlsTimeout = Duration(seconds: 8);
-Duration? controlsTimeout({
-  required bool fullscreen,
-  bool autoHideFullscreen = false,
-}) => fullscreen
-    ? (autoHideFullscreen ? const Duration(seconds: 15) : null)
-    : playerControlsTimeout;
+Duration controlsTimeout({required bool fullscreen}) =>
+    fullscreen ? const Duration(seconds: 6) : playerControlsTimeout;
 
 class PlayerControls extends StatefulWidget {
   const PlayerControls({
@@ -30,7 +26,6 @@ class PlayerControls extends StatefulWidget {
     required this.onSeek,
     required this.onSeekStart,
     required this.onActivity,
-    this.onHide,
     this.onNext,
     this.failed = false,
     this.buffer = Duration.zero,
@@ -38,7 +33,7 @@ class PlayerControls extends StatefulWidget {
   final bool full, visible, playing, loading;
   final bool failed;
   final Duration buffer;
-  final VoidCallback? onHide, onNext;
+  final VoidCallback? onNext;
   final Duration position, duration;
   final String title, subtitle;
   final double rate;
@@ -225,12 +220,6 @@ class _PlayerControlsState extends State<PlayerControls> {
                                   ),
                                 ],
                               ),
-                            ),
-                          if (widget.full && widget.onHide != null)
-                            icon(
-                              Icons.visibility_off_outlined,
-                              '收起控制栏',
-                              widget.onHide,
                             ),
                           icon(Icons.tune_rounded, '播放设置', widget.onSettings),
                         ],
