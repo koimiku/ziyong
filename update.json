@@ -1,8 +1,8 @@
 {
-  "version": "1.6.6",
-  "name": "v1.6.6",
+  "version": "1.6.7",
+  "name": "v1.6.7",
   "notes": "全屏点击画面显示 / 隐藏控制栏，6 秒无操作自动收起；移除隐藏按钮和旧的自动收起开关。拖动进度、操作控制区、打开选集或设置时暂停计时，结束后重新计时。",
-  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.6",
-  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.6/app-release.apk",
-  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.6/anime-1.6.6-windows-x64.zip"
+  "htmlUrl": "https://github.com/koimiku/ziyong/releases/tag/v1.6.7",
+  "apkUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.7/app-release.apk",
+  "windowsUrl": "https://github.com/koimiku/ziyong/releases/download/v1.6.7/anime-1.6.7-windows-x64.zip"
 }

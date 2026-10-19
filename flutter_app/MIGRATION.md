@@ -1,8 +1,8 @@
 # Flutter 正式版迁移记录
 
-当前版本：1.6.6（Android versionCode 39）。Android 使用原包名 `com.anime.standalone` 与原上传证书；Windows 程序为 `anime.exe`。正式构建不再使用预览包名、预览标题或调试证书。
+当前版本：1.6.7（Android versionCode 40）。Android 使用原包名 `com.anime.standalone` 与原上传证书；Windows 程序为 `anime.exe`。正式构建不再使用预览包名、预览标题或调试证书。
 
-## 1.6.6 调整
+## 1.6.7 调整
 
 移除隐藏按钮和旧的全屏自动收起开关。全屏点击空白处切换控制栏显示 / 隐藏，6 秒无操作自动隐藏；拖动、触摸控制区及打开选集 / 设置期间暂停计时，操作结束后重新计时。暂停时全屏仍按 6 秒收起，加载和错误提示保留操作入口。
 
@@ -52,19 +52,19 @@ powershell -ExecutionPolicy Bypass -File scripts/build-flutter-windows.ps1 -Targ
 
 本机构建脚本在 NTFS 暂存，临时盘符避开 Unicode 路径和 F 盘符号链接限制，结束时恢复环境。签名值优先从 ANIME_* 构建环境读取；兼容使用现有签名配置，不新增硬编码签名密码或把证书放进 APK 资源。Linux CI 使用 `python scripts/build-flutter-android.py --no-pub`。
 
-输出在 `release/1.6.6/`：`app-release.apk`、`anime-1.6.6-windows-x64.zip` 与完整 Windows 目录。Windows 包含 app-local Visual C++ 运行库；解压后运行 anime.exe，必须保留 DLL 与 data 文件夹。`npm start` / `npm run app` 启动此正式原生程序；旧服务保留为 legacy 脚本，不打入原生安装包。
+输出在 `release/1.6.7/`：`app-release.apk`、`anime-1.6.7-windows-x64.zip` 与完整 Windows 目录。Windows 包含 app-local Visual C++ 运行库；解压后运行 anime.exe，必须保留 DLL 与 data 文件夹。`npm start` / `npm run app` 启动此正式原生程序；旧服务保留为 legacy 脚本，不打入原生安装包。
 
 ## 发布
 
 `.github/workflows/app-release.yml` 检查版本、运行测试并分别构建 Android / Windows。新 v* 标签只有在两端成功后才创建 GitHub Release，附带 APK、Windows ZIP 与 SHA-256 校验文件；遇到已有 Release 拒绝覆盖。
 
-按 AGENTS.md，提交推送时必须同步 package / lock 根版本、Android、Flutter pubspec、update.json 与新版本标签。不得复用标签。v1.6.6 发布流程构建 Android 和 Windows，并在两端成功后上传安装包至 GitHub Release。
+按 AGENTS.md，提交推送时必须同步 package / lock 根版本、Android、Flutter pubspec、update.json 与新版本标签。不得复用标签。v1.6.7 发布流程构建 Android 和 Windows，并在两端成功后上传安装包至 GitHub Release。
 
 ## 验证边界
 
 本地回归覆盖备份事务、同步冲突与请求头、云端进度、WebDAV、局域网访问校验与 HLS 代理、旧规则与原生媒体解析，以及 320 / 393 / 1280 宽度下的界面。可选 libmpv FFI 测试验证本地与 HTTP 媒体打开、定位、请求头和释放。
 
-本次正式构建通过 73 项 Flutter 回归测试；静态分析无问题。原生播放器的解码属性切换、本地 / HTTP 媒体、定位和请求头 FFI 验证记录保留在 1.6.5 的 QA 目录。Windows 可执行文件版本已核对为 1.6.6+39，安装包目录包含播放器、SQLite、界面资源及 C++ 运行库。APK 签名与原上传证书一致，包名为 com.anime.standalone。
+本次正式构建通过 73 项 Flutter 回归测试；静态分析无问题。原生播放器的解码属性切换、本地 / HTTP 媒体、定位和请求头 FFI 验证记录保留在 1.6.5 的 QA 目录。Windows 可执行文件版本已核对为 1.6.7+40，安装包目录包含播放器、SQLite、界面资源及 C++ 运行库。APK 签名与原上传证书一致，包名为 com.anime.standalone。
 
 尚未连接 Android 真机，不能声称已经测量实际帧率、温升、耗电，或验证每个网站 / 验证码的实时可用性。WebView 依赖仍为预发布组件，需要在实际设备验证。
 

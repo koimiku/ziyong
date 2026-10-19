@@ -1033,6 +1033,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                         releaseControls();
                                       },
                                 onHorizontalDragCancel: () {
+                                  if (dragPosition == null) return;
                                   setState(() => dragPosition = null);
                                   releaseControls();
                                 },
@@ -1061,6 +1062,7 @@ class _WatchPageState extends State<WatchPage> with WidgetsBindingObserver {
                                         releaseControls();
                                       },
                                 onVerticalDragCancel: () {
+                                  if (adjustingVolume == null) return;
                                   setState(() {
                                     adjustingVolume = null;
                                     gestureLabel = '';

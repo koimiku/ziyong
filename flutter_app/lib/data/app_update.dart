@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-const appVersion = '1.6.6';
+const appVersion = '1.6.7';
 const releasesUrl = 'https://github.com/koimiku/ziyong/releases';
 bool newerVersion(String next, String current) {
   List<int> parts(String value) => value

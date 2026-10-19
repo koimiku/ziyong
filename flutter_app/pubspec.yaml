@@ -1,7 +1,7 @@
 name: anime_flutter
 description: "anime Android and Windows client"
 publish_to: 'none'
-version: 1.6.6+39
+version: 1.6.7+40
 
 environment:
   sdk: ^3.13.5
